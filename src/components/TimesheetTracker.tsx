@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Download, Calendar, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, Download } from 'lucide-react';
 
 // Define interfaces for type safety
 interface TimeEntry {
@@ -94,6 +94,23 @@ const TimesheetTracker = () => {
     }
   }, [timeEntries]);
 
+  // Update date field when month selection changes (SINGLE useEffect - no duplicates)
+  useEffect(() => {
+    if (viewMode === 'single' && selectedMonths[0]) {
+      const selectedMonth = selectedMonths[0];
+      const currentDate = newEntry.date;
+      const currentMonth = currentDate.slice(0, 7);
+      
+      // If the current date doesn't match the selected month, update it
+      if (currentMonth !== selectedMonth) {
+        setNewEntry(prev => ({
+          ...prev,
+          date: `${selectedMonth}-01`
+        }));
+      }
+    }
+  }, [selectedMonths, viewMode, newEntry.date]);
+
   const addEntry = () => {
     if (newEntry.consultant && newEntry.hours) {
       const allRoles = { ...consultants, ...projectManager };
@@ -130,22 +147,6 @@ const TimesheetTracker = () => {
       }
     }
   };
-
- useEffect(() => {
-    if (viewMode === 'single' && selectedMonths[0]) {
-      const selectedMonth = selectedMonths[0];
-      const currentDate = newEntry.date;
-      const currentMonth = currentDate.slice(0, 7);
-      
-      // If the current date doesn't match the selected month, update it
-      if (currentMonth !== selectedMonth) {
-        setNewEntry(prev => ({
-          ...prev,
-          date: `${selectedMonth}-01`
-        }));
-      }
-    }
-  }, [selectedMonths, viewMode]);
 
   const deleteEntry = (id: number) => {
     if (window.confirm('Er du sikker på at du vil slette denne registreringen?')) {
@@ -332,23 +333,6 @@ const TimesheetTracker = () => {
       alert('Feil ved eksportering av data');
     }
   };
-
-  // Add this useEffect to update the date field when month selection changes
-  useEffect(() => {
-    if (viewMode === 'single' && selectedMonths[0]) {
-      const selectedMonth = selectedMonths[0];
-      const currentDate = newEntry.date;
-      const currentMonth = currentDate.slice(0, 7);
-      
-      // If the current date doesn't match the selected month, update it
-      if (currentMonth !== selectedMonth) {
-        setNewEntry(prev => ({
-          ...prev,
-          date: `${selectedMonth}-01`
-        }));
-      }
-    }
-  }, [selectedMonths, viewMode]);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -777,7 +761,9 @@ const TimesheetTracker = () => {
                   <p className="text-xs text-gray-600 mb-1">Kostnad totalt</p>
                   <p className="text-xl font-light text-gray-900">{grandTotalCost.toLocaleString('no-NO')} kr</p>
                   <p className="text-xs text-gray-500">
-                    {viewMode === 'single' ? getMonthName(selectedMonths[0]) : `${selectedMonths.length} måneder`}
+                    {viewMode === 'single' && selectedMonths[0] 
+                      ? getMonthName(selectedMonths[0]) 
+                      : `${selectedMonths.length} måneder`}
                   </p>
                 </div>
               </div>
@@ -789,6 +775,4 @@ const TimesheetTracker = () => {
   );
 };
 
-
 export default TimesheetTracker;
-

@@ -7,7 +7,6 @@ interface TimeEntry {
   consultant: string;
   date: string;
   hours: number;
-  devOpsTask: string;
   description: string;
   cost: number;
   isProjectManager: boolean;
@@ -17,7 +16,6 @@ interface NewEntry {
   consultant: string;
   date: string;
   hours: string;
-  devOpsTask: string;
   description: string;
 }
 
@@ -68,7 +66,6 @@ const TimesheetTracker = () => {
     consultant: '',
     date: new Date().toISOString().slice(0, 10),
     hours: '',
-    devOpsTask: '',
     description: ''
   });
 
@@ -133,7 +130,6 @@ const TimesheetTracker = () => {
         consultant: '',
         date: resetDate,
         hours: '',
-        devOpsTask: '',
         description: ''
       });
 
@@ -182,9 +178,13 @@ const TimesheetTracker = () => {
   const grandTotalCost = totalCost + pmTotalCost;
   
   const monthlyBudget = 200;
+  const budgetWarningThreshold = 170;
   const avgHoursPerMonth = viewMode === 'multiple' && selectedMonths.length > 0 
     ? totalHours / selectedMonths.length 
     : totalHours;
+
+  // Check if we're approaching budget limit
+  const isApproachingBudget = avgHoursPerMonth >= budgetWarningThreshold;
 
   // Konsulent statistikk (kun konsulenter, ikke prosjektleder)
   const consultantStats: ConsultantStat[] = Object.keys(consultants).map(name => {
@@ -297,13 +297,12 @@ const TimesheetTracker = () => {
       
       // Detaljerte registreringer
       worksheetData.push(['DETALJERTE TIMEREGISTRERINGER']);
-      worksheetData.push(['Konsulent', 'Dato', 'Timer', 'DevOps Oppgave', 'Beskrivelse', 'Kostnad (NOK)']);
+      worksheetData.push(['Konsulent', 'Dato', 'Timer', 'DevOps oppgaver denne perioden', 'Kostnad (NOK)']);
       filteredEntries.forEach(entry => {
         worksheetData.push([
           entry.consultant,
           entry.date,
           entry.hours,
-          entry.devOpsTask,
           entry.description,
           entry.cost.toLocaleString('no-NO')
         ]);
@@ -343,6 +342,34 @@ const TimesheetTracker = () => {
           <h1 className="text-3xl font-light text-gray-900 mb-2">Timesoversikt</h1>
           <p className="text-gray-600">Point Taken · Røde Kors Forvaltningsavtale</p>
         </div>
+
+        {/* Budget Warning Alert */}
+        {isApproachingBudget && (
+          <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-yellow-800">
+                  Nærmer seg budsjettgrense
+                </h3>
+                <div className="mt-2 text-sm text-yellow-700">
+                  <p>
+                    Du har registrert <strong>{avgHoursPerMonth.toFixed(1)} timer</strong> av {monthlyBudget} tillatte timer {viewMode === 'multiple' ? 'per måned i snitt' : 'denne måneden'}.
+                    {avgHoursPerMonth >= monthlyBudget ? (
+                      <span className="block mt-1 font-medium text-red-700">Budsjettet er overskredet!</span>
+                    ) : (
+                      <span className="block mt-1">Bare {(monthlyBudget - avgHoursPerMonth).toFixed(1)} timer igjen til budsjettgrensen.</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Visning og eksport */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
@@ -501,7 +528,7 @@ const TimesheetTracker = () => {
         {/* Legg til ny registrering */}
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Ny timeregistrering</h2>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Konsulent</label>
               <select
@@ -532,24 +559,13 @@ const TimesheetTracker = () => {
             </div>
             
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Timer</label>
+              <label className="block text-sm text-gray-600 mb-1">Timer (månedlig total)</label>
               <input
                 type="number"
                 step="0.25"
                 value={newEntry.hours}
                 onChange={(e) => setNewEntry({...newEntry, hours: e.target.value})}
-                placeholder="7.5"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">DevOps Oppgave</label>
-              <input
-                type="text"
-                value={newEntry.devOpsTask}
-                onChange={(e) => setNewEntry({...newEntry, devOpsTask: e.target.value})}
-                placeholder="f.eks. #1234"
+                placeholder="160"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
               />
             </div>
@@ -566,12 +582,12 @@ const TimesheetTracker = () => {
           </div>
           
           <div className="mb-4">
-            <label className="block text-sm text-gray-600 mb-1">Beskrivelse</label>
+            <label className="block text-sm text-gray-600 mb-1">DevOps oppgaver denne perioden</label>
             <input
               type="text"
               value={newEntry.description}
               onChange={(e) => setNewEntry({...newEntry, description: e.target.value})}
-              placeholder="Beskriv oppgaven som ble utført"
+              placeholder="Beskriv DevOps oppgavene som ble utført denne måneden"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
             />
           </div>
@@ -615,10 +631,7 @@ const TimesheetTracker = () => {
                       Timer
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      DevOps Oppgave
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Beskrivelse
+                      DevOps oppgaver denne perioden
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Kostnad
@@ -651,13 +664,6 @@ const TimesheetTracker = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {entry.hours}h
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {entry.devOpsTask && (
-                          <span className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded font-mono">
-                            {entry.devOpsTask}
-                          </span>
-                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
                         <div className="truncate">{entry.description}</div>

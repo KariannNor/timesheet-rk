@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Download } from 'lucide-react';
+import { timeEntryService } from '../lib/supabase';
 
-// Define interfaces for type safety
+// Oppdater TimeEntry interface til å matche database-strukturen
 interface TimeEntry {
   id: number;
   consultant: string;
@@ -9,7 +10,7 @@ interface TimeEntry {
   hours: number;
   description: string;
   cost: number;
-  isProjectManager: boolean;
+  isProjectManager: boolean; // Dette mapper til is_project_manager i databasen
 }
 
 interface NewEntry {
@@ -41,6 +42,7 @@ interface MonthlyHistoryItem {
 
 const TimesheetTracker = () => {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([new Date().toISOString().slice(0, 7)]);
   const [viewMode, setViewMode] = useState<'single' | 'multiple'>('single');
   
@@ -69,27 +71,44 @@ const TimesheetTracker = () => {
     description: ''
   });
 
-  // Last inn data fra localStorage ved oppstart
+  // Last inn data fra Supabase ved oppstart
   useEffect(() => {
-    const savedData = localStorage.getItem('pointTakenTimeEntries');
-    if (savedData) {
-      try {
-        const parsedData = JSON.parse(savedData);
-        setTimeEntries(parsedData);
-      } catch (error) {
-        console.error('Error parsing saved data:', error);
-      }
-    }
+    loadTimeEntries();
   }, []);
 
-  // Lagre data til localStorage når timeEntries endres
-  useEffect(() => {
+  const loadTimeEntries = async () => {
     try {
-      localStorage.setItem('pointTakenTimeEntries', JSON.stringify(timeEntries));
+      setLoading(true);
+      const data = await timeEntryService.getAll();
+      
+      // Konverter fra database format til component format
+      const convertedEntries: TimeEntry[] = data.map(entry => ({
+        id: entry.id,
+        consultant: entry.consultant,
+        date: entry.date,
+        hours: entry.hours,
+        description: entry.description || '',
+        cost: entry.cost,
+        isProjectManager: entry.is_project_manager
+      }));
+      
+      setTimeEntries(convertedEntries);
     } catch (error) {
-      console.error('Error saving to localStorage:', error);
+      console.error('Error loading time entries:', error);
+      // Fallback til localStorage hvis Supabase feiler
+      const savedData = localStorage.getItem('pointTakenTimeEntries');
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData);
+          setTimeEntries(parsedData);
+        } catch (error) {
+          console.error('Error parsing saved data:', error);
+        }
+      }
+    } finally {
+      setLoading(false);
     }
-  }, [timeEntries]);
+  };
 
   // Update date field when month selection changes (SINGLE useEffect - no duplicates)
   useEffect(() => {
@@ -108,45 +127,71 @@ const TimesheetTracker = () => {
     }
   }, [selectedMonths, viewMode, newEntry.date]);
 
-  const addEntry = () => {
+  const addEntry = async () => {
     if (newEntry.consultant && newEntry.hours) {
-      const allRoles = { ...consultants, ...projectManager };
-      const entry: TimeEntry = {
-        id: Date.now(),
-        ...newEntry,
-        hours: parseFloat(newEntry.hours),
-        cost: parseFloat(newEntry.hours) * allRoles[newEntry.consultant],
-        isProjectManager: newEntry.consultant in projectManager
-      };
-      setTimeEntries([...timeEntries, entry]);
-      
-      // Reset form but keep the date in the selected month
-      const currentSelectedMonth = selectedMonths[0];
-      const resetDate = viewMode === 'single' && currentSelectedMonth 
-        ? `${currentSelectedMonth}-01` 
-        : new Date().toISOString().slice(0, 10);
-      
-      setNewEntry({
-        consultant: '',
-        date: resetDate,
-        hours: '',
-        description: ''
-      });
+      try {
+        const allRoles = { ...consultants, ...projectManager };
+        const entryData = {
+          consultant: newEntry.consultant,
+          date: newEntry.date,
+          hours: parseFloat(newEntry.hours),
+          description: newEntry.description,
+          cost: parseFloat(newEntry.hours) * allRoles[newEntry.consultant],
+          is_project_manager: newEntry.consultant in projectManager
+        };
 
-      // If in single mode and the new entry's month doesn't match selected month,
-      // automatically switch to that month
-      if (viewMode === 'single') {
-        const entryMonth = entry.date.slice(0, 7);
-        if (entryMonth !== selectedMonths[0]) {
-          setSelectedMonths([entryMonth]);
+        // Lagre til Supabase
+        const savedEntry = await timeEntryService.create(entryData);
+        
+        // Konverter og legg til i local state
+        const newTimeEntry: TimeEntry = {
+          id: savedEntry.id,
+          consultant: savedEntry.consultant,
+          date: savedEntry.date,
+          hours: savedEntry.hours,
+          description: savedEntry.description || '',
+          cost: savedEntry.cost,
+          isProjectManager: savedEntry.is_project_manager
+        };
+
+        setTimeEntries([...timeEntries, newTimeEntry]);
+        
+        // Reset form
+        const currentSelectedMonth = selectedMonths[0];
+        const resetDate = viewMode === 'single' && currentSelectedMonth 
+          ? `${currentSelectedMonth}-01` 
+          : new Date().toISOString().slice(0, 10);
+        
+        setNewEntry({
+          consultant: '',
+          date: resetDate,
+          hours: '',
+          description: ''
+        });
+
+        // Switch month if needed
+        if (viewMode === 'single') {
+          const entryMonth = newTimeEntry.date.slice(0, 7);
+          if (entryMonth !== selectedMonths[0]) {
+            setSelectedMonths([entryMonth]);
+          }
         }
+      } catch (error) {
+        console.error('Error saving entry:', error);
+        alert('Feil ved lagring av timeregistrering. Prøv igjen.');
       }
     }
   };
 
-  const deleteEntry = (id: number) => {
+  const deleteEntry = async (id: number) => {
     if (window.confirm('Er du sikker på at du vil slette denne registreringen?')) {
-      setTimeEntries(timeEntries.filter(entry => entry.id !== id));
+      try {
+        await timeEntryService.delete(id);
+        setTimeEntries(timeEntries.filter(entry => entry.id !== id));
+      } catch (error) {
+        console.error('Error deleting entry:', error);
+        alert('Feil ved sletting av timeregistrering. Prøv igjen.');
+      }
     }
   };
 
@@ -332,6 +377,22 @@ const TimesheetTracker = () => {
       alert('Feil ved eksportering av data');
     }
   };
+
+  // Add loading state to the return
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex justify-center items-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+              <p className="mt-2 text-gray-600">Laster timeregistreringer...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

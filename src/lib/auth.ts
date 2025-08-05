@@ -2,14 +2,20 @@ import { supabase } from './supabase'
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 
 export const authService = {
-  // Sign in with Microsoft
-  async signInWithMicrosoft() {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'azure',
-      options: {
-        scopes: 'openid email profile',
-        redirectTo: window.location.origin
-      }
+  // Simple email/password sign in
+  async signInWithEmail(email: string, password: string) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+    return { data, error }
+  },
+
+  // Create account (you can control who gets accounts)
+  async signUpWithEmail(email: string, password: string) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password
     })
     return { data, error }
   },
@@ -26,7 +32,6 @@ export const authService = {
     return { user, error }
   },
 
-  // Listen to auth changes with proper typing
   onAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {
     return supabase.auth.onAuthStateChange(callback)
   }

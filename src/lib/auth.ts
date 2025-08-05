@@ -7,19 +7,20 @@ export const authService = {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'azure',
       options: {
-        scopes: 'email profile',
+        scopes: 'openid email profile',
         redirectTo: 'https://timesoversikt.netlify.app/'
       }
     })
     return { data, error }
   },
 
-  // Rest of the service remains the same...
+  // Sign out
   async signOut() {
     const { error } = await supabase.auth.signOut()
     return { error }
   },
 
+  // Get current user
   async getCurrentUser() {
     const { data: { user }, error } = await supabase.auth.getUser()
     return { user, error }

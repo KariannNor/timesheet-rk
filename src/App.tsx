@@ -1,7 +1,7 @@
-import TimesheetTracker from './components/TimesheetTracker'
+import AuthWrapper from './components/AuthWrapper'
 
 function App() {
-  return <TimesheetTracker />
+  return <AuthWrapper />
 }
 
 export default App

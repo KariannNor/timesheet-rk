@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Download } from 'lucide-react';
 import { timeEntryService } from '../lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 // Oppdater TimeEntry interface til å matche database-strukturen
 interface TimeEntry {
@@ -40,11 +41,22 @@ interface MonthlyHistoryItem {
   entries: number;
 }
 
-const TimesheetTracker = () => {
+interface TimesheetTrackerProps {
+  user: User | null;
+  isReadOnly: boolean;
+}
+
+
+const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([new Date().toISOString().slice(0, 7)]);
   const [viewMode, setViewMode] = useState<'single' | 'multiple'>('single');
+
+  // Use user for logging or tracking
+  useEffect(() => {
+    console.log('TimesheetTracker loaded for user:', user?.email);
+  }, [user]);
   
   // Point Taken konsulenter med timepriser fra avtalen
   const consultants: Record<string, number> = {
@@ -401,7 +413,12 @@ const TimesheetTracker = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-light text-gray-900 mb-2">Timesoversikt</h1>
-          <p className="text-gray-600">Point Taken · Røde Kors Forvaltningsavtale</p>
+          <p className="text-gray-600">Røde Kors - Forvaltningsavtale</p>
+          {isReadOnly && (
+            <p className="text-sm text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-md px-3 py-2 mt-2">
+              Du har kun lesetilgang til denne oversikten
+            </p>
+          )}
         </div>
 
         {/* Budget Warning Alert */}
@@ -586,82 +603,84 @@ const TimesheetTracker = () => {
           </div>
         )}
 
-        {/* Legg til ny registrering */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Ny timeregistrering</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Konsulent</label>
-              <select
-                value={newEntry.consultant}
-                onChange={(e) => setNewEntry({...newEntry, consultant: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-              >
-                <option value="">Velg konsulent</option>
-                {Object.keys(consultants).map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-                <optgroup label="Prosjektledelse">
-                  {Object.keys(projectManager).map(name => (
+        {/* Legg til ny registrering - Hide if read-only */}
+        {!isReadOnly && (
+          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Ny timeregistrering</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Konsulent</label>
+                <select
+                  value={newEntry.consultant}
+                  onChange={(e) => setNewEntry({...newEntry, consultant: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                >
+                  <option value="">Velg konsulent</option>
+                  {Object.keys(consultants).map(name => (
                     <option key={name} value={name}>{name}</option>
                   ))}
-                </optgroup>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Dato</label>
-              <input
-                type="date"
-                value={newEntry.date}
-                onChange={(e) => setNewEntry({...newEntry, date: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Timer (månedlig total)</label>
-              <input
-                type="number"
-                step="0.25"
-                value={newEntry.hours}
-                onChange={(e) => setNewEntry({...newEntry, hours: e.target.value})}
-                placeholder="160"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Kostnad</label>
-              <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm text-gray-600">
-                {newEntry.consultant && newEntry.hours ? 
-                  `${(parseFloat(newEntry.hours || '0') * (consultants[newEntry.consultant] || projectManager[newEntry.consultant] || 0)).toLocaleString('no-NO')} kr` : 
-                  '0 kr'
-                }
+                  <optgroup label="Prosjektledelse">
+                    {Object.keys(projectManager).map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Dato</label>
+                <input
+                  type="date"
+                  value={newEntry.date}
+                  onChange={(e) => setNewEntry({...newEntry, date: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Timer (månedlig total)</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  value={newEntry.hours}
+                  onChange={(e) => setNewEntry({...newEntry, hours: e.target.value})}
+                  placeholder="160"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Kostnad</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm text-gray-600">
+                  {newEntry.consultant && newEntry.hours ? 
+                    `${(parseFloat(newEntry.hours || '0') * (consultants[newEntry.consultant] || projectManager[newEntry.consultant] || 0)).toLocaleString('no-NO')} kr` : 
+                    '0 kr'
+                  }
+                </div>
               </div>
             </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm text-gray-600 mb-1">DevOps oppgaver denne perioden</label>
+              <input
+                type="text"
+                value={newEntry.description}
+                onChange={(e) => setNewEntry({...newEntry, description: e.target.value})}
+                placeholder="Beskriv DevOps oppgavene som ble utført denne måneden"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+              />
+            </div>
+            
+            <button
+              onClick={addEntry}
+              disabled={!newEntry.consultant || !newEntry.hours}
+              className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              <Plus size={16} />
+              <span>Legg til registrering</span>
+            </button>
           </div>
-          
-          <div className="mb-4">
-            <label className="block text-sm text-gray-600 mb-1">DevOps oppgaver denne perioden</label>
-            <input
-              type="text"
-              value={newEntry.description}
-              onChange={(e) => setNewEntry({...newEntry, description: e.target.value})}
-              placeholder="Beskriv DevOps oppgavene som ble utført denne måneden"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-            />
-          </div>
-          
-          <button
-            onClick={addEntry}
-            disabled={!newEntry.consultant || !newEntry.hours}
-            className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            <Plus size={16} />
-            <span>Legg til registrering</span>
-          </button>
-        </div>
+        )}
 
         {/* Timeregistreringer tabell */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -697,9 +716,11 @@ const TimesheetTracker = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Kostnad
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      
-                    </th>
+                    {!isReadOnly && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -732,14 +753,16 @@ const TimesheetTracker = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {entry.cost.toLocaleString('no-NO')} kr
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => deleteEntry(entry.id)}
-                          className="text-gray-400 hover:text-red-600 transition-colors"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
+                      {!isReadOnly && (
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => deleteEntry(entry.id)}
+                            className="text-gray-400 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

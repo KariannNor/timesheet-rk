@@ -15,11 +15,10 @@ const AuthWrapper = () => {
     })
 
     // Listen for auth changes
-const { data: { subscription } } = authService.onAuthStateChange((event, session) => {
-  console.log('Auth event:', event) 
-  setUser(session?.user || null)
-  setLoading(false)
-})
+    const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null)
+      setLoading(false)
+    })
 
     return () => subscription.unsubscribe()
   }, [])

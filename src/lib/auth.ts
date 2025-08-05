@@ -8,25 +8,23 @@ export const authService = {
       provider: 'azure',
       options: {
         scopes: 'email profile',
-        redirectTo: `${window.location.origin}/`
+        redirectTo: 'https://timesoversikt.netlify.app/'
       }
     })
     return { data, error }
   },
 
-  // Sign out
+  // Rest of the service remains the same...
   async signOut() {
     const { error } = await supabase.auth.signOut()
     return { error }
   },
 
-  // Get current user
   async getCurrentUser() {
     const { data: { user }, error } = await supabase.auth.getUser()
     return { user, error }
   },
 
-  // Listen to auth changes
   onAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {
     return supabase.auth.onAuthStateChange(callback)
   }

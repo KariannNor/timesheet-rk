@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 
 export const authService = {
   // Sign in with Microsoft
@@ -8,7 +8,7 @@ export const authService = {
       provider: 'azure',
       options: {
         scopes: 'openid email profile',
-        redirectTo: 'https://timesoversikt.netlify.app/'
+        redirectTo: window.location.origin
       }
     })
     return { data, error }
@@ -26,7 +26,10 @@ export const authService = {
     return { user, error }
   },
 
+  // Listen to auth changes with proper typing
   onAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {
     return supabase.auth.onAuthStateChange(callback)
   }
 }
+
+export type { User }

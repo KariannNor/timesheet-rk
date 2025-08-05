@@ -1,22 +1,29 @@
 import { useState, useEffect } from 'react'
-import { authService } from '../lib/auth'
+import { authService, type User } from '../lib/auth'
 import TimesheetTracker from './TimesheetTracker'
-import type { User } from '@supabase/supabase-js'
 
 const AuthWrapper = () => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Check if user is already logged in
-    authService.getCurrentUser().then(({ user }) => {
-      setUser(user)
+    authService.getCurrentUser().then(({ user, error }) => {
+      if (error) {
+        console.error('Error getting current user:', error)
+        setError('Feil ved henting av brukerinfo')
+      } else {
+        setUser(user)
+      }
       setLoading(false)
     })
 
     // Listen for auth changes
-    const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = authService.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event)
       setUser(session?.user || null)
+      setError(null)
       setLoading(false)
     })
 
@@ -24,10 +31,16 @@ const AuthWrapper = () => {
   }, [])
 
   const handleSignIn = async () => {
-    const { error } = await authService.signInWithMicrosoft()
-    if (error) {
-      console.error('Error signing in:', error)
-      alert('Feil ved innlogging. Prøv igjen.')
+    try {
+      setError(null)
+      const { error } = await authService.signInWithMicrosoft()
+      if (error) {
+        console.error('Error signing in:', error)
+        setError('Feil ved innlogging. Prøv igjen.')
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err)
+      setError('Uventet feil ved innlogging')
     }
   }
 
@@ -35,6 +48,7 @@ const AuthWrapper = () => {
     const { error } = await authService.signOut()
     if (error) {
       console.error('Error signing out:', error)
+      setError('Feil ved utlogging')
     }
   }
 
@@ -61,10 +75,16 @@ const AuthWrapper = () => {
             </p>
           </div>
           
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+          
           <div className="mt-8">
             <button
               onClick={handleSignIn}
-              className="w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+              className="w-full flex justify-center items-center px-4 py-3 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
             >
               <svg className="w-5 h-5 mr-2" viewBox="0 0 23 23">
                 <path fill="#f3f3f3" d="M0 0h23v23H0z"/>
@@ -81,8 +101,9 @@ const AuthWrapper = () => {
     )
   }
 
-  // Define user roles - you can store this in Supabase or check email domains
-  const isReadOnly = !user.email?.endsWith('@pointtaken.no') // Example: only Point Taken users can edit
+  // All users have READ-ONLY access by default
+  // You can modify this logic later if you want specific users to have write access
+  const isReadOnly = true
 
   return (
     <div>
@@ -101,14 +122,12 @@ const AuthWrapper = () => {
               <p className="text-sm font-medium text-gray-900">
                 {user.user_metadata?.full_name || user.email}
               </p>
-              {isReadOnly && (
-                <p className="text-xs text-gray-500">Kun lesetilgang</p>
-              )}
+              <p className="text-xs text-gray-500">Kun lesetilgang</p>
             </div>
           </div>
           <button
             onClick={handleSignOut}
-            className="text-sm text-gray-500 hover:text-gray-700"
+            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
           >
             Logg ut
           </button>

@@ -4,6 +4,7 @@ import { Plus, Settings } from 'lucide-react'
 import ProjectModal from './ProjectModal'
 import { projectService, type Project, type CreateProjectData } from '../lib/projectService'
 import { timeEntryService } from '../lib/supabase'
+import logo from '../assets/pt.png'
 
 // Legg til denne type-definisjonen etter imports, rundt linje 7:
 type LegacyOrganization = {
@@ -302,11 +303,28 @@ const LandingPage = () => {
           {/* Logo */}
           <div className="mb-8">
             <img 
-              src="../public/pt.png" 
+              src={logo} 
               alt="Point Taken Logo" 
               className="mx-auto h-16 w-auto"
+              onError={(e) => {
+                // Hide broken image and show text fallback
+                const target = e.currentTarget;
+                const parent = target.parentNode;
+                
+                if (parent) {
+                  target.style.display = 'none';
+                  
+                  // Check if fallback already exists to avoid duplicates
+                  if (!parent.querySelector('.logo-fallback')) {
+                    const fallback = document.createElement('div');
+                    fallback.className = 'logo-fallback mx-auto w-16 h-16 bg-gray-900 rounded-lg flex items-center justify-center';
+                    fallback.innerHTML = '<span class="text-white font-bold text-xl">PT</span>';
+                    parent.appendChild(fallback);
+                  }
+                }
+              }}
             />
-          </div>
+       </div>
         {/* Title and subtitle */}
           {/* <h1 className="text-4xl font-light text-gray-900 mb-4">Prosjektportal</h1> */}
           <p className="text-xl text-gray-600">Logg inn for å se dine prosjekter</p>

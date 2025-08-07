@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { authService, type User } from '../lib/auth'
-import { projectService } from '../lib/projectService'
-import type { Project } from '../types/project'
+import { projectService, type Project } from '../lib/projectService' // Import from projectService instead
 import TimesheetTracker from './TimesheetTracker'
 
 interface AuthWrapperProps {
@@ -53,8 +52,8 @@ const getAccessControlForUser = (user: User, project: Project | null) => {
     }
   }
   
-  // Database prosjekter - sjekk access_email
-  if (project && project.accessEmail) {
+  // Database prosjekter - sjekk access_email (handle optional field)
+  if (project && project.accessEmail && project.accessEmail.trim() !== '') {
     if (email === project.accessEmail.toLowerCase()) {
       return {
         role: 'viewer',
@@ -100,63 +99,72 @@ const AuthWrapper = ({ organizationId }: AuthWrapperProps) => {
   }, [])
 
   // Load project data when organizationId changes
-  useEffect(() => {
-    const loadProject = async () => {
-      setProjectLoading(true)
-      try {
-        // First check if it's a legacy organization ID
-        const legacyOrgInfo = getLegacyOrganizationInfo(organizationId)
-        if (legacyOrgInfo) {
-          setProject({
-            id: organizationId,
-            name: legacyOrgInfo.name,
-            budgetHours: null,
-            monthlyBudgetHours: null,
-            hourlyRate: 1550,
-            consultants: [],
-            projectManagerRate: 1550,
-            createdAt: '',
-            updatedAt: ''
-          })
-        } else {
-          // Try to fetch from database (UUID-based project)
-          const projects = await projectService.getAll()
-          const foundProject = projects.find(p => p.id === organizationId)
-          if (foundProject) {
-            setProject(foundProject)
-          } else {
-            setProject({
-              id: organizationId,
-              name: 'Ukjent prosjekt',
-              budgetHours: null,
-              monthlyBudgetHours: null,
-              hourlyRate: 1550,
-              consultants: [],
-              projectManagerRate: 1550,
-              createdAt: '',
-              updatedAt: ''
-            })
-          }
-        }
-      } catch (error) {
-        console.error('Error loading project:', error)
+useEffect(() => {
+  const loadProject = async () => {
+    setProjectLoading(true)
+    try {
+      // First check if it's a legacy organization ID
+      const legacyOrgInfo = getLegacyOrganizationInfo(organizationId)
+      if (legacyOrgInfo) {
         setProject({
           id: organizationId,
-          name: 'Feil ved lasting av prosjekt',
+          name: legacyOrgInfo.name,
           budgetHours: null,
           monthlyBudgetHours: null,
           hourlyRate: 1550,
           consultants: [],
           projectManagerRate: 1550,
+          projectManagerName: 'Kariann (Prosjektleder)', // Add this field
+          category: 'Legacy', // Add this field
           createdAt: '',
-          updatedAt: ''
+          updatedAt: '',
+          accessEmail: '' // Add this field
         })
+      } else {
+        // Try to fetch from database (UUID-based project)
+        const projects = await projectService.getAll()
+        const foundProject = projects.find(p => p.id === organizationId)
+        if (foundProject) {
+          setProject(foundProject)
+        } else {
+          setProject({
+            id: organizationId,
+            name: 'Ukjent prosjekt',
+            budgetHours: null,
+            monthlyBudgetHours: null,
+            hourlyRate: 1550,
+            consultants: [],
+            projectManagerRate: 1550,
+            projectManagerName: 'Prosjektleder', // Add this field
+            category: 'Ukjent', // Add this field
+            createdAt: '',
+            updatedAt: '',
+            accessEmail: '' // Add this field
+          })
+        }
       }
-      setProjectLoading(false)
+    } catch (error) {
+      console.error('Error loading project:', error)
+      setProject({
+        id: organizationId,
+        name: 'Feil ved lasting av prosjekt',
+        budgetHours: null,
+        monthlyBudgetHours: null,
+        hourlyRate: 1550,
+        consultants: [],
+        projectManagerRate: 1550,
+        projectManagerName: 'Prosjektleder', // Add this field
+        category: 'Feil', // Add this field
+        createdAt: '',
+        updatedAt: '',
+        accessEmail: '' // Add this field
+      })
     }
+    setProjectLoading(false)
+  }
 
-    loadProject()
-  }, [organizationId])
+  loadProject()
+}, [organizationId])
 
   const getLegacyOrganizationInfo = (orgId: string) => {
     const orgMap: Record<string, { name: string; theme: string }> = {

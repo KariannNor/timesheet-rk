@@ -296,12 +296,21 @@ const LandingPage = () => {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto py-16 px-4">
-          <div className="text-center mb-16">
-            <h1 className="text-4xl font-light text-gray-900 mb-4">Timesoversikt Portal</h1>
-            <p className="text-xl text-gray-600">Point Taken - Forvaltningsavtaler</p>
+   <div className="min-h-screen bg-gray-50">
+      <div className="max-w-4xl mx-auto py-16 px-4">
+        <div className="text-center mb-16 mt-10">
+          {/* Logo */}
+          <div className="mb-8">
+            <img 
+              src="../public/pt.png" 
+              alt="Point Taken Logo" 
+              className="mx-auto h-16 w-auto"
+            />
           </div>
+        {/* Title and subtitle */}
+          {/* <h1 className="text-4xl font-light text-gray-900 mb-4">Prosjektportal</h1> */}
+          <p className="text-xl text-gray-600">Logg inn for å se dine prosjekter</p>
+        </div>
 
           <div className="max-w-md mx-auto">
             <div className="bg-white rounded-lg shadow-sm border p-8">

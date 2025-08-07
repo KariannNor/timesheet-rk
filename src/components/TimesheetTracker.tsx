@@ -1,7 +1,19 @@
-import { useState, useEffect } from 'react';
+import CustomerNotes from './CustomerNotes'
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Download } from 'lucide-react';
 import { timeEntryService } from '../lib/supabase';
+import { projectService } from '../lib/projectService';
 import type { User } from '@supabase/supabase-js';
+
+interface Project {
+  id: string;
+  name: string;
+  consultants: string[];
+  hourlyRate: number;
+  projectManagerRate: number;
+  monthlyBudgetHours: number | null;
+  budgetHours: number | null;
+}
 
 // Oppdater TimeEntry interface til å matche database-strukturen
 interface TimeEntry {
@@ -44,12 +56,87 @@ interface MonthlyHistoryItem {
 interface TimesheetTrackerProps {
   user: User | null;
   isReadOnly: boolean;
+  organizationId: string;
 }
 
+interface OrganizationConfig {
+  consultants: Record<string, number>;
+  projectManager: Record<string, number>;
+  monthlyBudget: number | null;
+  totalBudget: number | null;
+  organizationName: string;
+}
 
-const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
+// Erstatt getConsultantsAndPricesForOrganization funksjonen
+const getConsultantsAndPricesForOrganization = (organizationId: string): OrganizationConfig => {
+  switch (organizationId) {
+    case 'infunnel':
+      return {
+        consultants: {
+          'Thomas': 1550,
+          'Njål': 1550,
+          'Mathias': 1550,
+          'Madelein': 1550
+        },
+        projectManager: {
+          'Kariann (Prosjektleder)': 1550
+        },
+        monthlyBudget: null, // Ingen månedlig budsjett
+        totalBudget: 630, // Total tilgjengelige timer
+        organizationName: 'Infunnel/Holmen'
+      }
+    
+    case 'advokatforeningen':
+      return {
+        consultants: {
+          'Thomas': 1574,
+          'Marta': 1574,
+          'Mateusz': 1574,
+          'Tomasz': 1574
+        },
+        projectManager: {
+          'Kariann (Prosjektleder)': 1574
+        },
+        monthlyBudget: null, // Ingen månedlig budsjett
+        totalBudget: 1886, // Total tilgjengelige timer
+        organizationName: 'Advokatforeningen CRM'
+      }
+    
+    case 'redcross':
+    default:
+      return {
+        consultants: {
+            'Njål': 1550,
+            'Mathias': 1550,
+            'Per': 1550,
+            'Pepe': 1550,
+            'Ulrikke': 1550,
+            'Andri': 1550,
+            'Philip': 1550,
+            'Nick': 1550,
+            'MVP/Rådgiver': 1550
+        },
+        projectManager: {
+          'Kariann (Prosjektleder)': 1550
+        },
+        monthlyBudget: 200, // Månedlig budsjett
+        totalBudget: null, // Ingen total grense
+        organizationName: 'Røde Kors'
+      }
+  }
+}
+
+const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTrackerProps) => {
+  // State for organization config - start with default, then override if it's a database project
+  const [orgConfig, setOrgConfig] = useState<OrganizationConfig>(() => 
+    getConsultantsAndPricesForOrganization(organizationId)
+  );
+
+  const { consultants, projectManager, monthlyBudget, totalBudget, organizationName } = orgConfig;
+
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [projectLoading, setProjectLoading] = useState(false);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([new Date().toISOString().slice(0, 7)]);
   const [viewMode, setViewMode] = useState<'single' | 'multiple'>('single');
 
@@ -58,24 +145,6 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
     console.log('TimesheetTracker loaded for user:', user?.email);
   }, [user]);
   
-  // Point Taken konsulenter med timepriser fra avtalen
-  const consultants: Record<string, number> = {
-    'Njål': 1550,
-    'Mathias': 1550,
-    'Per': 1550,
-    'Pepe': 1550,
-    'Ulrikke': 1550,
-    'Andri': 1550,
-    'Philip': 1550,
-    'Nick': 1550,
-    'MVP/Rådgiver': 1550
-  };
-
-  // Prosjektleder faktureres separat
-  const projectManager: Record<string, number> = {
-    'Kariann (Prosjektleder)': 1550
-  };
-
   const [newEntry, setNewEntry] = useState<NewEntry>({
     consultant: '',
     date: new Date().toISOString().slice(0, 10),
@@ -83,15 +152,65 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
     description: ''
   });
 
-  // Last inn data fra Supabase ved oppstart
+  // Load project data and potentially override organization config for database projects
   useEffect(() => {
-    loadTimeEntries();
-  }, []);
+    const loadProjectData = async () => {
+      if (!organizationId) return;
+      
+      try {
+        setProjectLoading(true);
+        
+        // For legacy prosjekter, bruk eksisterende getConsultantsAndPricesForOrganization
+        const legacyIds = ['redcross', 'advokatforeningen', 'infunnel'];
+        
+        if (legacyIds.includes(organizationId)) {
+          // Legacy prosjekter - configuration is already set correctly
+          console.log('Using legacy organization config for:', organizationId);
+        } else {
+          // Database prosjekter - last fra database og override config
+          try {
+            const projects: Project[] = await projectService.getAll();
+            const project: Project | undefined = projects.find((p: Project) => p.id === organizationId);
+            
+            if (project && project.consultants && project.consultants.length > 0) {
+              console.log('Loading consultants for project:', project.name, project.consultants);
+              
+              // Create consultants object with project's hourly rate
+              const projectConsultants: Record<string, number> = {};
+              project.consultants.forEach((consultant: string) => {
+                projectConsultants[consultant] = project.hourlyRate;
+              });
 
-  const loadTimeEntries = async () => {
+              // Override organization config with project data
+              setOrgConfig({
+                consultants: projectConsultants,
+                projectManager: {
+                  'Kariann (Prosjektleder)': project.projectManagerRate
+                },
+                monthlyBudget: project.monthlyBudgetHours,
+                totalBudget: project.budgetHours,
+                organizationName: project.name
+              });
+            }
+          } catch (projectError) {
+            console.error('Error loading project from database:', projectError);
+            // Keep using legacy config as fallback
+          }
+        }
+      } catch (error) {
+        console.error('Error loading project data:', error);
+      } finally {
+        setProjectLoading(false);
+      }
+    };
+
+    loadProjectData();
+  }, [organizationId]);
+
+  const loadTimeEntries = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await timeEntryService.getAll();
+      const data = await timeEntryService.getAll(organizationId);
       
       // Konverter fra database format til component format
       const convertedEntries: TimeEntry[] = data.map(entry => ({
@@ -103,7 +222,7 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
         cost: entry.cost,
         isProjectManager: entry.is_project_manager
       }));
-      
+        
       setTimeEntries(convertedEntries);
     } catch (error) {
       console.error('Error loading time entries:', error);
@@ -113,14 +232,19 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
         try {
           const parsedData = JSON.parse(savedData);
           setTimeEntries(parsedData);
-        } catch (error) {
-          console.error('Error parsing saved data:', error);
+        } catch (parseError) {
+          console.error('Error parsing saved data:', parseError);
         }
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [organizationId]);
+
+  // Last inn data fra Supabase ved oppstart
+  useEffect(() => {
+    loadTimeEntries();
+  }, [loadTimeEntries]);
 
   // Update date field when month selection changes (SINGLE useEffect - no duplicates)
   useEffect(() => {
@@ -143,13 +267,16 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
     if (newEntry.consultant && newEntry.hours) {
       try {
         const allRoles = { ...consultants, ...projectManager };
+        const hourlyRate = allRoles[newEntry.consultant as keyof typeof allRoles] || 0;
+        
         const entryData = {
           consultant: newEntry.consultant,
           date: newEntry.date,
           hours: parseFloat(newEntry.hours),
           description: newEntry.description,
-          cost: parseFloat(newEntry.hours) * allRoles[newEntry.consultant],
-          is_project_manager: newEntry.consultant in projectManager
+          cost: parseFloat(newEntry.hours) * hourlyRate,
+          is_project_manager: newEntry.consultant in projectManager,
+          organization_id: organizationId
         };
 
         // Lagre til Supabase
@@ -234,14 +361,25 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
   const grandTotalHours = totalHours + pmTotalHours;
   const grandTotalCost = totalCost + pmTotalCost;
   
-  const monthlyBudget = 200;
-  const budgetWarningThreshold = 170;
+  const budgetWarningThreshold = monthlyBudget ? monthlyBudget * 0.85 : null // 85% av månedlig budsjett
   const avgHoursPerMonth = viewMode === 'multiple' && selectedMonths.length > 0 
     ? totalHours / selectedMonths.length 
-    : totalHours;
+    : totalHours
 
-  // Check if we're approaching budget limit
-  const isApproachingBudget = avgHoursPerMonth >= budgetWarningThreshold;
+  // Beregn total timer brukt (alle måneder)
+  const allConsultantEntries = timeEntries.filter(entry => !entry.isProjectManager);
+  const allProjectManagerEntries = timeEntries.filter(entry => entry.isProjectManager);
+
+  // For Røde Kors: kun konsulent timer teller mot budsjett
+  // For andre: både konsulent og prosjektleder timer teller mot budsjett
+  const totalHoursUsed = organizationId === 'redcross' 
+    ? allConsultantEntries.reduce((sum, entry) => sum + entry.hours, 0)
+    : allConsultantEntries.reduce((sum, entry) => sum + entry.hours, 0) + allProjectManagerEntries.reduce((sum, entry) => sum + entry.hours, 0);
+
+  // Check budget warnings
+  const isApproachingMonthlyBudget = monthlyBudget && avgHoursPerMonth >= (budgetWarningThreshold || 0);
+  const totalBudgetPercentage = totalBudget ? (totalHoursUsed / totalBudget) * 100 : null;
+  const isApproachingTotalBudget = totalBudgetPercentage !== null && totalBudgetPercentage >= 85;
 
   // Konsulent statistikk (kun konsulenter, ikke prosjektleder)
   const consultantStats: ConsultantStat[] = Object.keys(consultants).map(name => {
@@ -312,7 +450,7 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
       const worksheetData: (string | number)[][] = [];
       
       // Header for sammendrag
-      worksheetData.push(['POINT TAKEN - RØDE KORS TIMESOVERSIKT']);
+      worksheetData.push([`POINT TAKEN - ${organizationName.toUpperCase()} TIMESOVERSIKT`]);
       worksheetData.push(['Periode:', viewMode === 'single' && selectedMonths[0] 
         ? getMonthName(selectedMonths[0]) 
         : `${selectedMonths.length} måneder`]);
@@ -326,10 +464,20 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
       worksheetData.push(['Prosjektleder timer:', pmTotalHours]);
       worksheetData.push(['Prosjektleder kostnad:', `${pmTotalCost.toLocaleString('no-NO')} NOK`]);
       worksheetData.push(['TOTAL KOSTNAD:', `${grandTotalCost.toLocaleString('no-NO')} NOK`]);
-      if (viewMode === 'multiple') {
-        worksheetData.push(['Gjennomsnitt konsulenter per måned:', `${avgHoursPerMonth.toFixed(1)} timer`]);
+
+      if (monthlyBudget) {
+        if (viewMode === 'multiple') {
+          worksheetData.push(['Gjennomsnitt konsulenter per måned:', `${avgHoursPerMonth.toFixed(1)} timer`]);
+        }
+        worksheetData.push(['Månedsbudsjett forbruk:', `${((avgHoursPerMonth / monthlyBudget) * 100).toFixed(1)}%`]);
       }
-      worksheetData.push(['Budsjettforbruk konsulenter:', `${((avgHoursPerMonth / monthlyBudget) * 100).toFixed(1)}%`]);
+
+      if (totalBudget && totalBudgetPercentage !== null) {
+        const budgetDescription = organizationId === 'redcross' 
+          ? `${totalBudgetPercentage.toFixed(1)}% (${totalHoursUsed}/${totalBudget} timer - kun konsulenter)`
+          : `${totalBudgetPercentage.toFixed(1)}% (${totalHoursUsed}/${totalBudget} timer - inkl. prosjektleder)`;
+        worksheetData.push(['Total ramme brukt:', budgetDescription]);
+      }
       worksheetData.push([]);
       
       // Konsulent fordeling
@@ -344,7 +492,7 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
       
       // Prosjektleder fordeling
       if (pmStats.length > 0) {
-        worksheetData.push(['PROSJEKTLEDELSE (SEPARAT FAKTURERING)']);
+        worksheetData.push(['PROSJEKTLEDELSE']);
         worksheetData.push(['Navn', 'Timer', 'Kostnad (NOK)']);
         pmStats.forEach(stat => {
           worksheetData.push([stat.name, stat.hours, stat.cost.toLocaleString('no-NO')]);
@@ -391,16 +539,12 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
   };
 
   // Add loading state to the return
-  if (loading) {
+  if (loading || projectLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex justify-center items-center h-64">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-              <p className="mt-2 text-gray-600">Laster timeregistreringer...</p>
-            </div>
-          </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Laster...</p>
         </div>
       </div>
     );
@@ -413,7 +557,10 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-light text-gray-900 mb-2">Timesoversikt</h1>
-          <p className="text-gray-600">Røde Kors - Forvaltningsavtale</p>
+          <p className="text-gray-600">
+            {organizationName}
+            {organizationId === 'redcross' && ' - Forvaltningsavtale'}
+          </p>
           {isReadOnly && (
             <p className="text-sm text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-md px-3 py-2 mt-2">
               Du har kun lesetilgang til denne oversikten
@@ -422,7 +569,7 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
         </div>
 
         {/* Budget Warning Alert */}
-        {isApproachingBudget && (
+        {(isApproachingMonthlyBudget || isApproachingTotalBudget) && (
           <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <div className="flex items-start">
               <div className="flex-shrink-0">
@@ -435,14 +582,29 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
                   Nærmer seg budsjettgrense
                 </h3>
                 <div className="mt-2 text-sm text-yellow-700">
-                  <p>
-                    Du har registrert <strong>{avgHoursPerMonth.toFixed(1)} timer</strong> av {monthlyBudget} tillatte timer {viewMode === 'multiple' ? 'per måned i snitt' : 'denne måneden'}.
-                    {avgHoursPerMonth >= monthlyBudget ? (
-                      <span className="block mt-1 font-medium text-red-700">Budsjettet er overskredet!</span>
-                    ) : (
-                      <span className="block mt-1">Bare {(monthlyBudget - avgHoursPerMonth).toFixed(1)} timer igjen til budsjettgrensen.</span>
-                    )}
-                  </p>
+                  {isApproachingMonthlyBudget && monthlyBudget && (
+                    <p>
+                      Du har registrert <strong>{avgHoursPerMonth.toFixed(1)} timer</strong> av {monthlyBudget} tillatte timer {viewMode === 'multiple' ? 'per måned i snitt' : 'denne måneden'}.
+                      {avgHoursPerMonth >= monthlyBudget ? (
+                        <span className="block mt-1 font-medium text-red-700">Månedsbudsjettet er overskredet!</span>
+                      ) : (
+                        <span className="block mt-1">Bare {(monthlyBudget - avgHoursPerMonth).toFixed(1)} timer igjen til månedsgrensen.</span>
+                      )}
+                    </p>
+                  )}
+                  {isApproachingTotalBudget && totalBudget && totalBudgetPercentage !== null && (
+                    <p className={isApproachingMonthlyBudget ? "mt-2" : ""}>
+                      <strong>{totalHoursUsed} timer</strong> av {totalBudget} tilgjengelige timer brukt totalt ({totalBudgetPercentage.toFixed(1)}%).
+                      {organizationId !== 'redcross' && (
+                        <span className="text-xs block">Inkluderer både konsulent og prosjektleder timer.</span>
+                      )}
+                      {totalBudgetPercentage >= 100 ? (
+                        <span className="block mt-1 font-medium text-red-700">Total timeramme er overskredet!</span>
+                      ) : (
+                        <span className="block mt-1">Bare {(totalBudget - totalHoursUsed)} timer igjen av total ramme.</span>
+                      )}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -523,7 +685,7 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
         )}
 
         {/* Sammendrag kort */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-6 mb-8">
           <div className="bg-white p-6 rounded-lg border border-gray-200">
             <p className="text-sm text-gray-600 mb-1">Konsulent timer</p>
             <p className="text-2xl font-light text-gray-900">{totalHours}</p>
@@ -532,16 +694,39 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
             )}
           </div>
           
-          <div className="bg-white p-6 rounded-lg border border-gray-200">
-            <p className="text-sm text-gray-600 mb-1">Budsjettforbruk</p>
-            <p className="text-2xl font-light text-gray-900">{((avgHoursPerMonth / monthlyBudget) * 100).toFixed(1)}%</p>
-            <div className="w-full bg-gray-100 rounded-full h-1 mt-2">
-              <div 
-                className="bg-gray-900 h-1 rounded-full transition-all"
-                style={{ width: `${Math.min((avgHoursPerMonth / monthlyBudget) * 100, 100)}%` }}
-              ></div>
+          {monthlyBudget && (
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Månedsbudsjett</p>
+              <p className="text-2xl font-light text-gray-900">{((avgHoursPerMonth / monthlyBudget) * 100).toFixed(1)}%</p>
+              <div className="w-full bg-gray-100 rounded-full h-1 mt-2">
+                <div 
+                  className={`h-1 rounded-full transition-all ${
+                    avgHoursPerMonth >= monthlyBudget ? 'bg-red-500' : 'bg-gray-900'
+                  }`}
+                  style={{ width: `${Math.min((avgHoursPerMonth / monthlyBudget) * 100, 100)}%` }}
+                ></div>
+              </div>
             </div>
-          </div>
+          )}
+          
+          {totalBudget && totalBudgetPercentage !== null && (
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-600 mb-1">Total ramme</p>
+              <p className="text-2xl font-light text-gray-900">{totalBudgetPercentage.toFixed(1)}%</p>
+              <p className="text-xs text-gray-500">
+                {totalHoursUsed} / {totalBudget} timer
+                {organizationId === 'redcross' ? ' (kun konsulenter)' : ' (inkl. prosjektleder)'}
+              </p>
+              <div className="w-full bg-gray-100 rounded-full h-1 mt-2">
+                <div 
+                  className={`h-1 rounded-full transition-all ${
+                    totalBudgetPercentage >= 100 ? 'bg-red-500' : totalBudgetPercentage >= 85 ? 'bg-yellow-500' : 'bg-gray-900'
+                  }`}
+                  style={{ width: `${Math.min(totalBudgetPercentage, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
           
           <div className="bg-white p-6 rounded-lg border border-gray-200">
             <p className="text-sm text-gray-600 mb-1">Konsulent kostnad</p>
@@ -589,8 +774,7 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
         {/* Prosjektleder separat */}
         {pmStats.length > 0 && (
           <div className="bg-blue-50 rounded-lg border border-blue-200 p-6 mb-8">
-            <h2 className="text-lg font-medium text-gray-900 mb-2">Prosjektledelse (separat fakturering)</h2>
-            <p className="text-sm text-gray-600 mb-4">Faktureres utenom hovedavtalen</p>
+            <h2 className="text-lg font-medium text-gray-900 mb-2">Prosjektledelse</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {pmStats.map(stat => (
                 <div key={stat.name} className="p-4 bg-white rounded-md border border-blue-200">
@@ -653,7 +837,7 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
                 <label className="block text-sm text-gray-600 mb-1">Kostnad</label>
                 <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm text-gray-600">
                   {newEntry.consultant && newEntry.hours ? 
-                    `${(parseFloat(newEntry.hours || '0') * (consultants[newEntry.consultant] || projectManager[newEntry.consultant] || 0)).toLocaleString('no-NO')} kr` : 
+                    `${(parseFloat(newEntry.hours || '0') * ((consultants[newEntry.consultant as keyof typeof consultants] || projectManager[newEntry.consultant as keyof typeof projectManager]) || 0)).toLocaleString('no-NO')} kr` : 
                     '0 kr'
                   }
                 </div>
@@ -733,12 +917,12 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
                           {entry.consultant}
                           {entry.isProjectManager && (
                             <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
-                              Separat fakturering
+                              Prosjektledelse
                             </span>
                           )}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {(consultants[entry.consultant] || projectManager[entry.consultant])} kr/t
+                          {(consultants[entry.consultant as keyof typeof consultants] || projectManager[entry.consultant as keyof typeof projectManager])} kr/t
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -774,10 +958,14 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
         {/* Footer sammendrag */}
         {filteredEntries.length > 0 && (
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Forvaltningsavtale (konsulenter) */}
+            {/* Konsulent timer / Forvaltningsavtale */}
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <h3 className="text-sm font-medium text-gray-900 mb-4 uppercase tracking-wide border-b border-gray-200 pb-2">
-                Forvaltningsavtale (200 timer/måned)
+                {organizationId === 'redcross' ? (
+                  monthlyBudget ? `Forvaltningsavtale (${monthlyBudget} timer/måned)` : 'Forvaltningsavtale'
+                ) : (
+                  totalBudget ? `Konsulent timer (${totalBudget} timer totalt)` : 'Konsulent timer'
+                )}
               </h3>
               <div className="space-y-4">
                 <div>
@@ -787,11 +975,23 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
                     <p className="text-xs text-gray-500">Ø {avgHoursPerMonth.toFixed(1)}h/måned</p>
                   )}
                 </div>
-                <div>
-                  <p className="text-xs text-gray-600 mb-1">Budsjettforbruk</p>
-                  <p className="text-xl font-light text-gray-900">{((avgHoursPerMonth / monthlyBudget) * 100).toFixed(1)}%</p>
-                  <p className="text-xs text-gray-500">av 200t budsjett</p>
-                </div>
+                {monthlyBudget && (
+                  <div>
+                    <p className="text-xs text-gray-600 mb-1">Månedsbudsjett</p>
+                    <p className="text-xl font-light text-gray-900">{((avgHoursPerMonth / monthlyBudget) * 100).toFixed(1)}%</p>
+                    <p className="text-xs text-gray-500">av {monthlyBudget}t budsjett</p>
+                  </div>
+                )}
+                {totalBudget && totalBudgetPercentage !== null && (
+                  <div>
+                    <p className="text-xs text-gray-600 mb-1">Total ramme brukt</p>
+                    <p className="text-xl font-light text-gray-900">{totalBudgetPercentage.toFixed(1)}%</p>
+                    <p className="text-xs text-gray-500">
+                      {totalHoursUsed} / {totalBudget} timer
+                      {organizationId === 'redcross' ? ' (kun konsulenter)' : ' (inkl. prosjektleder)'}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-gray-600 mb-1">Konsulent kostnad</p>
                   <p className="text-xl font-light text-gray-900">{totalCost.toLocaleString('no-NO')} kr</p>
@@ -805,7 +1005,7 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
             {/* Separat fakturering (prosjektleder) */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <h3 className="text-sm font-medium text-gray-900 mb-4 uppercase tracking-wide border-b border-blue-200 pb-2">
-                Separat fakturering
+                Prosjektledelse
               </h3>
               {pmTotalHours > 0 ? (
                 <div className="space-y-4">
@@ -818,7 +1018,9 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 mb-1">Timepris</p>
-                    <p className="text-xl font-light text-gray-900">1.550 kr</p>
+                    <p className="text-xl font-light text-gray-900">
+                      {Object.values(projectManager)[0]?.toLocaleString('no-NO') || '1550'} kr
+                    </p>
                     <p className="text-xs text-gray-500">per time</p>
                   </div>
                   <div>
@@ -860,9 +1062,18 @@ const TimesheetTracker = ({ user, isReadOnly }: TimesheetTrackerProps) => {
             </div>
           </div>
         )}
+
+        {/* Divider / Skillelinje */}
+        <div className="border-t border-gray-300 my-8"></div>
+
+        {/* Customer Notes Section */}
+        <CustomerNotes 
+          organizationId={organizationId}
+          isReadOnly={isReadOnly}
+        />
       </div>
     </div>
   );
-};
+}
 
 export default TimesheetTracker;

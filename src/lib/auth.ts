@@ -2,18 +2,9 @@ import { supabase } from './supabase'
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 
 export const authService = {
-  // Simple email/password sign in
+  // Sign in with email and password
   async signInWithEmail(email: string, password: string) {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
-    return { data, error }
-  },
-
-  // Create account (you can control who gets accounts)
-  async signUpWithEmail(email: string, password: string) {
-    const { data, error } = await supabase.auth.signUp({
       email,
       password
     })
@@ -32,15 +23,28 @@ export const authService = {
     return { user, error }
   },
 
+  // Listen to auth changes
   onAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {
     return supabase.auth.onAuthStateChange(callback)
   },
-  async resetPassword(email: string) {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`
-  })
-  return { data, error }
-}
+
+  // Update user role
+  async updateUserRole(userId: string, role: 'admin' | 'user') {
+    const { data, error } = await supabase.auth.admin.updateUserById(
+      userId,
+      { 
+        user_metadata: { role } 
+      }
+    )
+    
+    if (error) throw error
+    return data
+  },
+
+  // Get current user role
+  getCurrentUserRole(user: User | null): 'admin' | 'user' {
+    return user?.user_metadata?.role || 'user'
+  }
 }
 
 export type { User }

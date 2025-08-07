@@ -28,7 +28,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     hourlyRate: 1550,
     consultants: [],
     projectManagerRate: 1550,
-    category: 'Prosjekt', // Nytt felt med standard verdi
+    projectManagerName: '', // Add this new field
+    category: 'Prosjekt',
     accessEmail: ''
   });
 
@@ -43,8 +44,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
         budgetHours: project.budgetHours,
         monthlyBudgetHours: project.monthlyBudgetHours,
         hourlyRate: project.hourlyRate,
-        consultants: project.consultants || [], // Ensure array
+        consultants: project.consultants || [],
         projectManagerRate: project.projectManagerRate,
+        projectManagerName: project.projectManagerName || '', // Add this
         category: project.category || 'Prosjekt',
         accessEmail: project.accessEmail || ''
       });
@@ -57,21 +59,22 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
         setBudgetType('none');
       }
     } else {
-      // Creating new project - reset ALL fields including consultants
+      // Creating new project - reset ALL fields
       setFormData({
         name: '',
         budgetHours: null,
         monthlyBudgetHours: null,
         hourlyRate: 1550,
-        consultants: [], // Explicitly empty array for new projects
+        consultants: [],
         projectManagerRate: 1550,
+        projectManagerName: '', // Reset this too
         category: 'Prosjekt',
         accessEmail: ''
       });
       setBudgetType('none');
-      setNewConsultantName(''); // Also reset the input field
+      setNewConsultantName('');
     }
-  }, [project, isOpen]); // Add isOpen as dependency!
+  }, [project, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -310,6 +313,27 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               </div>
             </div>
 
+            {/* NEW: Prosjektleder navn */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Prosjektleder navn *
+              </label>
+              <input
+                type="text"
+                value={formData.projectManagerName}
+                onChange={(e) => setFormData(prev => ({ 
+                  ...prev, 
+                  projectManagerName: e.target.value 
+                }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                placeholder="f.eks. Kariann Norheim"
+                required
+              />
+              <p className="text-sm text-gray-500 mt-1">
+                Navnet på prosjektlederen som skal vises i timeregistreringer
+              </p>
+            </div>
+
             {/* Konsulenter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -389,7 +413,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isLoading || !formData.name || formData.consultants.length === 0}
+                disabled={isLoading || !formData.name || formData.consultants.length === 0 || !formData.projectManagerName}
                 className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 {isLoading ? (

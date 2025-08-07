@@ -11,6 +11,7 @@ interface Project {
   consultants: string[];
   hourlyRate: number;
   projectManagerRate: number;
+  projectManagerName: string; // Add this field
   monthlyBudgetHours: number | null;
   budgetHours: number | null;
 }
@@ -79,10 +80,10 @@ const getConsultantsAndPricesForOrganization = (organizationId: string): Organiz
           'Madelein': 1550
         },
         projectManager: {
-          'Kariann (Prosjektleder)': 1550
+          'Kariann (Prosjektleder)': 1550 // Keep legacy default
         },
-        monthlyBudget: null, // Ingen månedlig budsjett
-        totalBudget: 630, // Total tilgjengelige timer
+        monthlyBudget: null,
+        totalBudget: 630,
         organizationName: 'Infunnel/Holmen'
       }
     
@@ -95,10 +96,10 @@ const getConsultantsAndPricesForOrganization = (organizationId: string): Organiz
           'Tomasz': 1574
         },
         projectManager: {
-          'Kariann (Prosjektleder)': 1574
+          'Kariann (Prosjektleder)': 1574 // Keep legacy default
         },
-        monthlyBudget: null, // Ingen månedlig budsjett
-        totalBudget: 1886, // Total tilgjengelige timer
+        monthlyBudget: null,
+        totalBudget: 1886,
         organizationName: 'Advokatforeningen CRM'
       }
     
@@ -117,10 +118,10 @@ const getConsultantsAndPricesForOrganization = (organizationId: string): Organiz
             'MVP/Rådgiver': 1550
         },
         projectManager: {
-          'Kariann (Prosjektleder)': 1550
+          'Kariann (Prosjektleder)': 1550 // Keep legacy default
         },
-        monthlyBudget: 200, // Månedlig budsjett
-        totalBudget: null, // Ingen total grense
+        monthlyBudget: 200,
+        totalBudget: null,
         organizationName: 'Røde Kors'
       }
   }
@@ -185,7 +186,7 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
               setOrgConfig({
                 consultants: projectConsultants,
                 projectManager: {
-                  'Kariann (Prosjektleder)': project.projectManagerRate
+                  [project.projectManagerName || 'Prosjektleder']: project.projectManagerRate // Use configurable name
                 },
                 monthlyBudget: project.monthlyBudgetHours,
                 totalBudget: project.budgetHours,
@@ -1050,7 +1051,6 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
                   <p className="text-xs text-gray-500">{filteredEntries.length} registreringer</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-600 mb-1">Kostnad totalt</p>
                   <p className="text-xl font-light text-gray-900">{grandTotalCost.toLocaleString('no-NO')} kr</p>
                   <p className="text-xs text-gray-500">
                     {viewMode === 'single' && selectedMonths[0] 

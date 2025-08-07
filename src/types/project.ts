@@ -6,9 +6,10 @@ export interface Project {
   hourlyRate: number;
   consultants: string[];
   projectManagerRate: number;
+  projectManagerName: string; // Add this field
   createdAt: string;
   updatedAt: string;
-  accessEmail?: string; // Ny epost som får tilgang til prosjektet
+  accessEmail?: string;
 }
 
 export interface CreateProjectData {
@@ -18,5 +19,6 @@ export interface CreateProjectData {
   hourlyRate: number;
   consultants: string[];
   projectManagerRate: number;
-  accessEmail?: string; // Ny epost som får tilgang til prosjektet
+  projectManagerName: string; // Add this field
+  accessEmail?: string;
 }

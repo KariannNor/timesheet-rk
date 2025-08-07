@@ -8,7 +8,8 @@ export interface Project {
   hourlyRate: number;
   consultants: string[];
   projectManagerRate: number;
-  category: string; // Nytt felt
+  projectManagerName: string; // Add this field
+  category: string;
   createdAt: string;
   updatedAt: string;
   accessEmail: string;
@@ -21,11 +22,11 @@ export interface CreateProjectData {
   hourlyRate: number;
   consultants: string[];
   projectManagerRate: number;
-  category: string; // Nytt felt
+  projectManagerName: string; // Add this field
+  category: string;
   accessEmail: string;
 }
 
-// Add this new interface for database updates
 interface ProjectUpdateData {
   name?: string;
   budget_hours?: number | null;
@@ -33,7 +34,8 @@ interface ProjectUpdateData {
   hourly_rate?: number;
   consultants?: string[];
   project_manager_rate?: number;
-  category?: string; // Nytt felt
+  project_manager_name?: string; // Add this field
+  category?: string;
   access_email?: string;
 }
 
@@ -57,13 +59,13 @@ export const projectService = {
       hourlyRate: project.hourly_rate,
       consultants: project.consultants || [],
       projectManagerRate: project.project_manager_rate,
-      category: project.category || 'Prosjekt', // Fallback verdi
+      projectManagerName: project.project_manager_name || 'Kariann (Prosjektleder)', // Fallback
+      category: project.category || 'Prosjekt',
       createdAt: project.created_at,
       updatedAt: project.updated_at,
       accessEmail: project.access_email
     }));
 
-    console.log('Loaded projects:', projects.map(p => ({ id: p.id, name: p.name, consultants: p.consultants })));
     return projects;
   },
 
@@ -77,7 +79,8 @@ export const projectService = {
         hourly_rate: projectData.hourlyRate,
         consultants: projectData.consultants,
         project_manager_rate: projectData.projectManagerRate,
-        category: projectData.category, // Nytt felt
+        project_manager_name: projectData.projectManagerName, // Add this
+        category: projectData.category,
         access_email: projectData.accessEmail
       }])
       .select()
@@ -96,6 +99,7 @@ export const projectService = {
       hourlyRate: data.hourly_rate,
       consultants: data.consultants || [],
       projectManagerRate: data.project_manager_rate,
+      projectManagerName: data.project_manager_name,
       category: data.category || 'Prosjekt',
       createdAt: data.created_at,
       updatedAt: data.updated_at,
@@ -112,7 +116,8 @@ export const projectService = {
     if (projectData.hourlyRate !== undefined) updateData.hourly_rate = projectData.hourlyRate;
     if (projectData.consultants !== undefined) updateData.consultants = projectData.consultants;
     if (projectData.projectManagerRate !== undefined) updateData.project_manager_rate = projectData.projectManagerRate;
-    if (projectData.category !== undefined) updateData.category = projectData.category; // Nytt felt
+    if (projectData.projectManagerName !== undefined) updateData.project_manager_name = projectData.projectManagerName; // Add this
+    if (projectData.category !== undefined) updateData.category = projectData.category;
     if (projectData.accessEmail !== undefined) updateData.access_email = projectData.accessEmail;
 
     const { data, error } = await supabase
@@ -135,6 +140,7 @@ export const projectService = {
       hourlyRate: data.hourly_rate,
       consultants: data.consultants || [],
       projectManagerRate: data.project_manager_rate,
+      projectManagerName: data.project_manager_name,
       category: data.category || 'Prosjekt',
       createdAt: data.created_at,
       updatedAt: data.updated_at,

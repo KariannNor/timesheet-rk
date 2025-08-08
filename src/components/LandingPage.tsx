@@ -22,7 +22,7 @@ type ProjectWithType = Project & {
 type AccessibleItem = LegacyOrganization | ProjectWithType;
 
 // Definer tilgangskontroll basert på e-postdomener
-const getAccessControlForUser = (user: User) => {
+const getAccessControlForUser = (user: User, allProjects: Project[] = []) => {
   const email = user.email?.toLowerCase() || ''
   
   // Admin tilgang - disse kan se alle prosjekter og administrere
@@ -34,68 +34,81 @@ const getAccessControlForUser = (user: User) => {
   
   if (adminEmails.includes(email)) {
     return {
-      role: 'admin',
+      role: 'admin' as const,
       canSeeAllProjects: true,
       canCreateProjects: true,
-      allowedOrganizations: ['redcross', 'advokatforeningen', 'infunnel'], // Alle
+      allowedOrganizations: ['redcross', 'advokatforeningen', 'infunnel'] as string[],
       message: 'Administrator - full tilgang til alle prosjekter'
     }
   }
   
-  // Point Taken ansatte (ALLE andre @pointtaken.no) - kan se alle men ikke redigere
+  // Point Taken ansatte (ALLE andre @pointtaken.no) - kan se alle
   if (email.endsWith('@pointtaken.no')) {
     return {
-      role: 'admin', // Endre fra 'viewer' til 'admin'
+      role: 'admin' as const,
       canSeeAllProjects: true,
-      canCreateProjects: true, // Endre fra false til true
-      allowedOrganizations: ['redcross', 'advokatforeningen', 'infunnel'],
-      message: 'Point Taken ansatt - full administrasjonstilgang' // Oppdater melding
+      canCreateProjects: true,
+      allowedOrganizations: ['redcross', 'advokatforeningen', 'infunnel'] as string[],
+      message: 'Point Taken ansatt - full administrasjonstilgang'
     }
   }
   
-  // Røde Kors tilgang
-  if (email.endsWith('@redcross.no') || email.endsWith('@rodekors.no')) {
+  // Sjekk om brukeren har tilgang til noen databaseprosjekter
+  const userProjects = allProjects.filter(project => 
+    project.accessEmail && project.accessEmail.toLowerCase() === email
+  );
+  
+  if (userProjects.length > 0) {
     return {
-      role: 'viewer',
+      role: 'viewer' as const,
       canSeeAllProjects: false,
       canCreateProjects: false,
-      allowedOrganizations: ['redcross'],
+      allowedOrganizations: [] as string[], // Eksplisitt type
+      userProjects: userProjects,
+      message: `Kunde - tilgang til ${userProjects.length} prosjekt${userProjects.length !== 1 ? 'er' : ''}`
+    }
+  }
+  
+  // Legacy organisasjoner - eksisterende tilgangskontroll
+  if (email.endsWith('@redcross.no') || email.endsWith('@rodekors.no')) {
+    return {
+      role: 'viewer' as const,
+      canSeeAllProjects: false,
+      canCreateProjects: false,
+      allowedOrganizations: ['redcross'] as string[],
       message: 'Røde Kors - tilgang til forvaltningsavtale'
     }
   }
   
-  // Advokatforeningen tilgang
   if (email.endsWith('@advokatforeningen.no')) {
     return {
-      role: 'viewer',
+      role: 'viewer' as const,
       canSeeAllProjects: false,
       canCreateProjects: false,
-      allowedOrganizations: ['advokatforeningen'],
+      allowedOrganizations: ['advokatforeningen'] as string[],
       message: 'Advokatforeningen - tilgang til CRM prosjekt'
     }
   }
   
-  // Infunnel/Holmen tilgang
   if (email.endsWith('@infunnel.no') || email.endsWith('@holmen.no')) {
     return {
-      role: 'viewer',
+      role: 'viewer' as const,
       canSeeAllProjects: false,
       canCreateProjects: false,
-      allowedOrganizations: ['infunnel'],
+      allowedOrganizations: ['infunnel'] as string[],
       message: 'Infunnel/Holmen - tilgang til CRM prosjekt'
     }
   }
   
   // Ingen tilgang
   return {
-    role: 'none',
+    role: 'none' as const,
     canSeeAllProjects: false,
     canCreateProjects: false,
-    allowedOrganizations: [],
+    allowedOrganizations: [] as string[],
     message: 'Ingen tilgang - kontakt administrator'
   }
 }
-
 // Oppdater getLegacyOrganizations funksjonen:
 const getLegacyOrganizations = (): LegacyOrganization[] => [
   // Kommentert ut alle legacy organisasjoner
@@ -152,14 +165,10 @@ const LandingPage = () => {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Load projects when user is authenticated and is admin
+  // Load projects when user is authenticated - ALLE brukere trenger prosjektdata for tilgangskontroll
   useEffect(() => {
     if (user) {
-      const userAccess = getAccessControlForUser(user)
-      // Kun last prosjekter hvis brukeren kan administrere eller kan se alle
-      if (userAccess.canCreateProjects || userAccess.canSeeAllProjects) {
-        loadProjects()
-      }
+      loadProjects()
     }
   }, [user])
 
@@ -327,7 +336,7 @@ const LandingPage = () => {
        </div>
         {/* Title and subtitle */}
           {/* <h1 className="text-4xl font-light text-gray-900 mb-4">Prosjektportal</h1> */}
-          <p className="text-xl text-gray-600">Logg inn for å se dine prosjekter</p>
+          <p className="text-xl text-gray-600">Logg inn for å se dine prosjekter</p>
         </div>
 
           <div className="max-w-md mx-auto">
@@ -388,8 +397,8 @@ const LandingPage = () => {
     )
   }
 
-  // Hent tilgangskontroll for denne brukeren
-  const userAccess = getAccessControlForUser(user)
+  // Hent tilgangskontroll for denne brukeren (MED prosjektdata)
+  const userAccess = getAccessControlForUser(user, projects)
 
   // Hvis brukeren ikke har tilgang, vis feilmelding
   if (userAccess.role === 'none') {
@@ -451,10 +460,7 @@ const LandingPage = () => {
   // Filtrer prosjekter basert på brukerens tilgang
   const allowedProjects = userAccess.canSeeAllProjects 
     ? projects // Show ALL projects for Point Taken employees (admins)
-    : projects.filter(project => {
-        // For non-admin users, only show projects where their email matches accessEmail
-        return project.accessEmail && user.email?.toLowerCase() === project.accessEmail.toLowerCase()
-      })
+    : userAccess.userProjects || [] // Show user's specific projects
 
   // Kombiner legacy organisasjoner og database prosjekter
   const allAccessibleItems: AccessibleItem[] = [
@@ -522,7 +528,7 @@ const LandingPage = () => {
           <div className="text-center py-12">
             <div className="text-gray-400 mb-4">
               <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012 2v2M7 7h10" />
               </svg>
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Ingen tilgjengelige prosjekter</h3>

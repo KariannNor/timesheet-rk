@@ -27,8 +27,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     monthlyBudgetHours: null,
     hourlyRate: 1550,
     consultants: [],
+    consultantRates: {}, // NEW: Individual consultant rates
     projectManagerRate: 1550,
-    projectManagerName: '', // Add this new field
+    projectManagerName: '',
     category: 'Prosjekt',
     accessEmail: ''
   });
@@ -38,15 +39,15 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   useEffect(() => {
     if (project) {
-      // Editing existing project - load all data
       setFormData({
         name: project.name,
         budgetHours: project.budgetHours,
         monthlyBudgetHours: project.monthlyBudgetHours,
         hourlyRate: project.hourlyRate,
         consultants: project.consultants || [],
+        consultantRates: project.consultantRates || {}, // NEW: Load individual rates
         projectManagerRate: project.projectManagerRate,
-        projectManagerName: project.projectManagerName || '', // Add this
+        projectManagerName: project.projectManagerName || '',
         category: project.category || 'Prosjekt',
         accessEmail: project.accessEmail || ''
       });
@@ -59,15 +60,15 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
         setBudgetType('none');
       }
     } else {
-      // Creating new project - reset ALL fields
       setFormData({
         name: '',
         budgetHours: null,
         monthlyBudgetHours: null,
         hourlyRate: 1550,
         consultants: [],
+        consultantRates: {}, // NEW: Reset individual rates
         projectManagerRate: 1550,
-        projectManagerName: '', // Reset this too
+        projectManagerName: '',
         category: 'Prosjekt',
         accessEmail: ''
       });
@@ -106,18 +107,41 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   const addConsultant = () => {
     if (newConsultantName.trim() && !formData.consultants.includes(newConsultantName.trim())) {
+      const newConsultant = newConsultantName.trim();
       setFormData(prev => ({
         ...prev,
-        consultants: [...prev.consultants, newConsultantName.trim()]
+        consultants: [...prev.consultants, newConsultant],
+        // NEW: Add default rate for new consultant (use standard hourly rate)
+        consultantRates: {
+          ...prev.consultantRates,
+          [newConsultant]: prev.hourlyRate
+        }
       }));
       setNewConsultantName('');
     }
   };
 
   const removeConsultant = (consultantToRemove: string) => {
+    setFormData(prev => {
+      const newConsultantRates = { ...prev.consultantRates };
+      delete newConsultantRates[consultantToRemove]; // NEW: Remove rate for deleted consultant
+      
+      return {
+        ...prev,
+        consultants: prev.consultants.filter(c => c !== consultantToRemove),
+        consultantRates: newConsultantRates
+      };
+    });
+  };
+
+  // NEW: Handle individual consultant rate changes
+  const updateConsultantRate = (consultant: string, rate: number) => {
     setFormData(prev => ({
       ...prev,
-      consultants: prev.consultants.filter(c => c !== consultantToRemove)
+      consultantRates: {
+        ...prev.consultantRates,
+        [consultant]: rate
+      }
     }));
   };
 
@@ -132,7 +156,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
             {project ? 'Rediger prosjekt' : 'Opprett nytt prosjekt'}
@@ -162,7 +186,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               />
             </div>
 
-            {/* NYTT: Kategori-felt */}
+            {/* Kategori */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Kategori
@@ -279,7 +303,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Konsulent timepris (NOK) *
+                  Standard konsulent timepris (NOK) *
                 </label>
                 <input
                   type="number"
@@ -293,6 +317,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   min="1"
                   required
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Standardpris for nye konsulenter
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -313,7 +340,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               </div>
             </div>
 
-            {/* NEW: Prosjektleder navn */}
+            {/* Prosjektleder navn */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Prosjektleder navn *
@@ -334,7 +361,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               </p>
             </div>
 
-            {/* Konsulenter */}
+            {/* NEW: Konsulenter med individuelle priser */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Konsulenter som skal jobbe på prosjektet
@@ -360,13 +387,25 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                 </button>
               </div>
               
-              {/* List of added consultants */}
+              {/* NEW: List of added consultants with individual rates */}
               {formData.consultants.length > 0 && (
-                <div className="border border-gray-200 rounded-md p-3 max-h-32 overflow-y-auto">
-                  <div className="space-y-2">
-                    {formData.consultants.map((consultant, index) => (
-                      <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
-                        <span className="text-sm font-medium">{consultant}</span>
+                <div className="border border-gray-200 rounded-md p-4 space-y-3 max-h-64 overflow-y-auto">
+                  {formData.consultants.map((consultant, index) => (
+                    <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-3 rounded">
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900">{consultant}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="number"
+                            value={formData.consultantRates?.[consultant] || formData.hourlyRate}
+                            onChange={(e) => updateConsultantRate(consultant, parseInt(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                            min="1"
+                          />
+                          <span className="text-xs text-gray-500">kr/t</span>
+                        </div>
                         <button
                           type="button"
                           onClick={() => removeConsultant(consultant)}
@@ -375,8 +414,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                           <Minus size={16} />
                         </button>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               )}
               

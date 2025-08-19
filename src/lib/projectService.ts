@@ -7,8 +7,9 @@ export interface Project {
   monthlyBudgetHours: number | null;
   hourlyRate: number;
   consultants: string[];
+  consultantRates?: Record<string, number>; // NEW: Individual consultant rates
   projectManagerRate: number;
-  projectManagerName: string; // Add this field
+  projectManagerName: string;
   category: string;
   createdAt: string;
   updatedAt: string;
@@ -21,8 +22,9 @@ export interface CreateProjectData {
   monthlyBudgetHours?: number | null;
   hourlyRate: number;
   consultants: string[];
+  consultantRates?: Record<string, number>; // NEW: Individual consultant rates
   projectManagerRate: number;
-  projectManagerName: string; // Add this field
+  projectManagerName: string;
   category: string;
   accessEmail: string;
 }
@@ -33,8 +35,9 @@ interface ProjectUpdateData {
   monthly_budget_hours?: number | null;
   hourly_rate?: number;
   consultants?: string[];
+  consultant_rates?: Record<string, number>; // NEW: Individual consultant rates
   project_manager_rate?: number;
-  project_manager_name?: string; // Add this field
+  project_manager_name?: string;
   category?: string;
   access_email?: string;
 }
@@ -58,8 +61,9 @@ export const projectService = {
       monthlyBudgetHours: project.monthly_budget_hours,
       hourlyRate: project.hourly_rate,
       consultants: project.consultants || [],
+      consultantRates: project.consultant_rates || {}, // NEW: Load individual rates
       projectManagerRate: project.project_manager_rate,
-      projectManagerName: project.project_manager_name || 'Kariann (Prosjektleder)', // Fallback
+      projectManagerName: project.project_manager_name || 'Kariann (Prosjektleder)',
       category: project.category || 'Prosjekt',
       createdAt: project.created_at,
       updatedAt: project.updated_at,
@@ -78,8 +82,9 @@ export const projectService = {
         monthly_budget_hours: projectData.monthlyBudgetHours,
         hourly_rate: projectData.hourlyRate,
         consultants: projectData.consultants,
+        consultant_rates: projectData.consultantRates || {}, // NEW: Save individual rates
         project_manager_rate: projectData.projectManagerRate,
-        project_manager_name: projectData.projectManagerName, // Add this
+        project_manager_name: projectData.projectManagerName,
         category: projectData.category,
         access_email: projectData.accessEmail
       }])
@@ -98,6 +103,7 @@ export const projectService = {
       monthlyBudgetHours: data.monthly_budget_hours,
       hourlyRate: data.hourly_rate,
       consultants: data.consultants || [],
+      consultantRates: data.consultant_rates || {}, // NEW: Return individual rates
       projectManagerRate: data.project_manager_rate,
       projectManagerName: data.project_manager_name,
       category: data.category || 'Prosjekt',
@@ -115,8 +121,9 @@ export const projectService = {
     if (projectData.monthlyBudgetHours !== undefined) updateData.monthly_budget_hours = projectData.monthlyBudgetHours;
     if (projectData.hourlyRate !== undefined) updateData.hourly_rate = projectData.hourlyRate;
     if (projectData.consultants !== undefined) updateData.consultants = projectData.consultants;
+    if (projectData.consultantRates !== undefined) updateData.consultant_rates = projectData.consultantRates; // NEW: Update individual rates
     if (projectData.projectManagerRate !== undefined) updateData.project_manager_rate = projectData.projectManagerRate;
-    if (projectData.projectManagerName !== undefined) updateData.project_manager_name = projectData.projectManagerName; // Add this
+    if (projectData.projectManagerName !== undefined) updateData.project_manager_name = projectData.projectManagerName;
     if (projectData.category !== undefined) updateData.category = projectData.category;
     if (projectData.accessEmail !== undefined) updateData.access_email = projectData.accessEmail;
 
@@ -139,6 +146,7 @@ export const projectService = {
       monthlyBudgetHours: data.monthly_budget_hours,
       hourlyRate: data.hourly_rate,
       consultants: data.consultants || [],
+      consultantRates: data.consultant_rates || {}, // NEW: Return individual rates
       projectManagerRate: data.project_manager_rate,
       projectManagerName: data.project_manager_name,
       category: data.category || 'Prosjekt',

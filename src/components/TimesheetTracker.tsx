@@ -2,19 +2,10 @@ import CustomerNotes from './CustomerNotes'
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Download } from 'lucide-react';
 import { timeEntryService } from '../lib/supabase';
-import { projectService } from '../lib/projectService';
+import { projectService, type Project } from '../lib/projectService'; // Import Project type from projectService
 import type { User } from '@supabase/supabase-js';
 
-interface Project {
-  id: string;
-  name: string;
-  consultants: string[];
-  hourlyRate: number;
-  projectManagerRate: number;
-  projectManagerName: string; // Add this field
-  monthlyBudgetHours: number | null;
-  budgetHours: number | null;
-}
+// Remove the local Project interface - we'll use the one from projectService instead
 
 // Oppdater TimeEntry interface til å matche database-strukturen
 interface TimeEntry {
@@ -24,7 +15,7 @@ interface TimeEntry {
   hours: number;
   description: string;
   cost: number;
-  isProjectManager: boolean; // Dette mapper til is_project_manager i databasen
+  isProjectManager: boolean;
 }
 
 interface NewEntry {
@@ -80,7 +71,7 @@ const getConsultantsAndPricesForOrganization = (organizationId: string): Organiz
           'Madelein': 1550
         },
         projectManager: {
-          'Kariann (Prosjektleder)': 1550 // Keep legacy default
+          'Kariann (Prosjektleder)': 1550
         },
         monthlyBudget: null,
         totalBudget: 630,
@@ -96,7 +87,7 @@ const getConsultantsAndPricesForOrganization = (organizationId: string): Organiz
           'Tomasz': 1574
         },
         projectManager: {
-          'Kariann (Prosjektleder)': 1574 // Keep legacy default
+          'Kariann (Prosjektleder)': 1574
         },
         monthlyBudget: null,
         totalBudget: 1886,
@@ -118,7 +109,7 @@ const getConsultantsAndPricesForOrganization = (organizationId: string): Organiz
             'MVP/Rådgiver': 1550
         },
         projectManager: {
-          'Kariann (Prosjektleder)': 1550 // Keep legacy default
+          'Kariann (Prosjektleder)': 1550
         },
         monthlyBudget: 200,
         totalBudget: null,
@@ -176,17 +167,18 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
             if (project && project.consultants && project.consultants.length > 0) {
               console.log('Loading consultants for project:', project.name, project.consultants);
               
-              // Create consultants object with project's hourly rate
+              // NEW: Use individual consultant rates or fall back to standard rate
               const projectConsultants: Record<string, number> = {};
               project.consultants.forEach((consultant: string) => {
-                projectConsultants[consultant] = project.hourlyRate;
+                // Use individual rate if available, otherwise use standard hourly rate
+                projectConsultants[consultant] = project.consultantRates?.[consultant] || project.hourlyRate;
               });
 
               // Override organization config with project data
               setOrgConfig({
                 consultants: projectConsultants,
                 projectManager: {
-                  [project.projectManagerName || 'Prosjektleder']: project.projectManagerRate // Use configurable name
+                  [project.projectManagerName || 'Prosjektleder']: project.projectManagerRate
                 },
                 monthlyBudget: project.monthlyBudgetHours,
                 totalBudget: project.budgetHours,
@@ -247,7 +239,7 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
     loadTimeEntries();
   }, [loadTimeEntries]);
 
-  // Update date field when month selection changes (SINGLE useEffect - no duplicates)
+  // Update date field when month selection changes
   useEffect(() => {
     if (viewMode === 'single' && selectedMonths[0]) {
       const selectedMonth = selectedMonths[0];
@@ -362,7 +354,7 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
   const grandTotalHours = totalHours + pmTotalHours;
   const grandTotalCost = totalCost + pmTotalCost;
   
-  const budgetWarningThreshold = monthlyBudget ? monthlyBudget * 0.85 : null // 85% av månedlig budsjett
+  const budgetWarningThreshold = monthlyBudget ? monthlyBudget * 0.85 : null
   const avgHoursPerMonth = viewMode === 'multiple' && selectedMonths.length > 0 
     ? totalHours / selectedMonths.length 
     : totalHours
@@ -423,7 +415,7 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
     const [year, month] = monthStr.split('-');
     const monthIndex = parseInt(month) - 1;
     if (monthIndex < 0 || monthIndex >= months.length) {
-      return monthStr; // fallback to original string if parsing fails
+      return monthStr;
     }
     return `${months[monthIndex]} ${year}`;
   };
@@ -481,12 +473,19 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
       }
       worksheetData.push([]);
       
-      // Konsulent fordeling
+      // Konsulent fordeling med timepriser
       if (consultantStats.length > 0) {
         worksheetData.push(['KONSULENT FORDELING']);
-        worksheetData.push(['Konsulent', 'Timer', 'Prosent', 'Kostnad (NOK)']);
+        worksheetData.push(['Konsulent', 'Timer', 'Prosent', 'Timepris (NOK)', 'Kostnad (NOK)']);
         consultantStats.forEach(stat => {
-          worksheetData.push([stat.name, stat.hours, `${stat.percentage.toFixed(1)}%`, stat.cost.toLocaleString('no-NO')]);
+          const hourlyRate = consultants[stat.name] || 0;
+          worksheetData.push([
+            stat.name, 
+            stat.hours, 
+            `${stat.percentage.toFixed(1)}%`, 
+            hourlyRate.toLocaleString('no-NO'),
+            stat.cost.toLocaleString('no-NO')
+          ]);
         });
         worksheetData.push([]);
       }
@@ -494,21 +493,29 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
       // Prosjektleder fordeling
       if (pmStats.length > 0) {
         worksheetData.push(['PROSJEKTLEDELSE']);
-        worksheetData.push(['Navn', 'Timer', 'Kostnad (NOK)']);
+        worksheetData.push(['Navn', 'Timer', 'Timepris (NOK)', 'Kostnad (NOK)']);
         pmStats.forEach(stat => {
-          worksheetData.push([stat.name, stat.hours, stat.cost.toLocaleString('no-NO')]);
+          const hourlyRate = projectManager[stat.name] || 0;
+          worksheetData.push([
+            stat.name, 
+            stat.hours, 
+            hourlyRate.toLocaleString('no-NO'),
+            stat.cost.toLocaleString('no-NO')
+          ]);
         });
         worksheetData.push([]);
       }
       
       // Detaljerte registreringer
       worksheetData.push(['DETALJERTE TIMEREGISTRERINGER']);
-      worksheetData.push(['Konsulent', 'Dato', 'Timer', 'DevOps oppgaver denne perioden', 'Kostnad (NOK)']);
+      worksheetData.push(['Konsulent', 'Dato', 'Timer', 'Timepris (NOK)', 'DevOps oppgaver denne perioden', 'Kostnad (NOK)']);
       filteredEntries.forEach(entry => {
+        const hourlyRate = (consultants[entry.consultant] || projectManager[entry.consultant]) || 0;
         worksheetData.push([
           entry.consultant,
           entry.date,
           entry.hours,
+          hourlyRate.toLocaleString('no-NO'),
           entry.description,
           entry.cost.toLocaleString('no-NO')
         ]);
@@ -539,7 +546,7 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
     }
   };
 
-  // Add loading state to the return
+  // Add loading state to the response
   if (loading || projectLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">

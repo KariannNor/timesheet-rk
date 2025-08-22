@@ -27,7 +27,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     monthlyBudgetHours: null,
     hourlyRate: 1550,
     consultants: [],
-    consultantRates: {}, // NEW: Individual consultant rates
+    consultantRates: {},
+    categories: [], // NEW: Categories for time tracking
     projectManagerRate: 1550,
     projectManagerName: '',
     category: 'Prosjekt',
@@ -36,6 +37,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   const [budgetType, setBudgetType] = useState<'total' | 'monthly' | 'none'>('none');
   const [newConsultantName, setNewConsultantName] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState(''); // NEW: For adding categories
 
   useEffect(() => {
     if (project) {
@@ -45,7 +47,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
         monthlyBudgetHours: project.monthlyBudgetHours,
         hourlyRate: project.hourlyRate,
         consultants: project.consultants || [],
-        consultantRates: project.consultantRates || {}, // NEW: Load individual rates
+        consultantRates: project.consultantRates || {},
+        categories: project.categories || [], // NEW: Load categories
         projectManagerRate: project.projectManagerRate,
         projectManagerName: project.projectManagerName || '',
         category: project.category || 'Prosjekt',
@@ -66,7 +69,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
         monthlyBudgetHours: null,
         hourlyRate: 1550,
         consultants: [],
-        consultantRates: {}, // NEW: Reset individual rates
+        consultantRates: {},
+        categories: [], // NEW: Reset categories
         projectManagerRate: 1550,
         projectManagerName: '',
         category: 'Prosjekt',
@@ -74,6 +78,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
       });
       setBudgetType('none');
       setNewConsultantName('');
+      setNewCategoryName(''); // NEW: Reset category input
     }
   }, [project, isOpen]);
 
@@ -111,7 +116,6 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
       setFormData(prev => ({
         ...prev,
         consultants: [...prev.consultants, newConsultant],
-        // NEW: Add default rate for new consultant (use standard hourly rate)
         consultantRates: {
           ...prev.consultantRates,
           [newConsultant]: prev.hourlyRate
@@ -124,7 +128,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   const removeConsultant = (consultantToRemove: string) => {
     setFormData(prev => {
       const newConsultantRates = { ...prev.consultantRates };
-      delete newConsultantRates[consultantToRemove]; // NEW: Remove rate for deleted consultant
+      delete newConsultantRates[consultantToRemove];
       
       return {
         ...prev,
@@ -134,7 +138,6 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     });
   };
 
-  // NEW: Handle individual consultant rate changes
   const updateConsultantRate = (consultant: string, rate: number) => {
     setFormData(prev => ({
       ...prev,
@@ -145,10 +148,33 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     }));
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  // NEW: Category management functions
+  const addCategory = () => {
+    if (newCategoryName.trim() && !formData.categories.includes(newCategoryName.trim())) {
+      const newCategory = newCategoryName.trim();
+      setFormData(prev => ({
+        ...prev,
+        categories: [...prev.categories, newCategory]
+      }));
+      setNewCategoryName('');
+    }
+  };
+
+  const removeCategory = (categoryToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      categories: prev.categories.filter(c => c !== categoryToRemove)
+    }));
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent, type: 'consultant' | 'category') => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      addConsultant();
+      if (type === 'consultant') {
+        addConsultant();
+      } else {
+        addCategory();
+      }
     }
   };
 
@@ -361,7 +387,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               </p>
             </div>
 
-            {/* NEW: Konsulenter med individuelle priser */}
+            {/* Konsulenter med individuelle priser */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Konsulenter som skal jobbe på prosjektet
@@ -373,7 +399,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   type="text"
                   value={newConsultantName}
                   onChange={(e) => setNewConsultantName(e.target.value)}
-                  onKeyPress={handleKeyPress}
+                  onKeyPress={(e) => handleKeyPress(e, 'consultant')}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                   placeholder="Skriv inn konsulent navn..."
                 />
@@ -423,6 +449,56 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                 {formData.consultants.length === 0 
                   ? 'Ingen konsulenter lagt til ennå' 
                   : `${formData.consultants.length} konsulent${formData.consultants.length !== 1 ? 'er' : ''} lagt til`
+                }
+              </p>
+            </div>
+
+            {/* NEW: Categories section */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Kategorier for timeregistrering
+              </label>
+              
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyPress={(e) => handleKeyPress(e, 'category')}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                  placeholder="f.eks. Frontend utvikling, Backend, Testing..."
+                />
+                <button
+                  type="button"
+                  onClick={addCategory}
+                  disabled={!newCategoryName.trim() || formData.categories.includes(newCategoryName.trim())}
+                  className="px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+              
+              {formData.categories.length > 0 && (
+                <div className="border border-gray-200 rounded-md p-4 space-y-2 max-h-48 overflow-y-auto">
+                  {formData.categories.map((category, index) => (
+                    <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
+                      <span className="text-sm text-gray-900">{category}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeCategory(category)}
+                        className="text-red-500 hover:text-red-700 transition-colors"
+                      >
+                        <Minus size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <p className="text-sm text-gray-500 mt-2">
+                {formData.categories.length === 0 
+                  ? 'Ingen kategorier lagt til ennå. Kategorier brukes for å organisere timer etter oppgavetype.' 
+                  : `${formData.categories.length} kategori${formData.categories.length !== 1 ? 'er' : ''} lagt til`
                 }
               </p>
             </div>

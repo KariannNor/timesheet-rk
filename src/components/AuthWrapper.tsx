@@ -113,11 +113,13 @@ useEffect(() => {
           monthlyBudgetHours: null,
           hourlyRate: 1550,
           consultants: [],
+          consultantRates: {},
+          categories: [], // ADD: Missing categories property
           projectManagerRate: 1550,
-          projectManagerName: 'Kariann (Prosjektleder)', // Add this field
-          category: 'Legacy', // Add this field
-          createdAt: '',
-          updatedAt: '',
+          projectManagerName: 'Kariann (Prosjektleder)',
+          category: 'Prosjekt',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           accessEmail: '' // Add this field
         })
       } else {
@@ -134,11 +136,13 @@ useEffect(() => {
             monthlyBudgetHours: null,
             hourlyRate: 1550,
             consultants: [],
+            consultantRates: {},
+            categories: [], // ADD: Missing categories property
             projectManagerRate: 1550,
-            projectManagerName: 'Prosjektleder', // Add this field
-            category: 'Ukjent', // Add this field
-            createdAt: '',
-            updatedAt: '',
+            projectManagerName: 'Kariann (Prosjektleder)',
+            category: 'Prosjekt',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             accessEmail: '' // Add this field
           })
         }
@@ -152,11 +156,13 @@ useEffect(() => {
         monthlyBudgetHours: null,
         hourlyRate: 1550,
         consultants: [],
+        consultantRates: {},
+        categories: [], // ADD: Missing categories property
         projectManagerRate: 1550,
-        projectManagerName: 'Prosjektleder', // Add this field
-        category: 'Feil', // Add this field
-        createdAt: '',
-        updatedAt: '',
+        projectManagerName: 'Kariann (Prosjektleder)',
+        category: 'Prosjekt',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         accessEmail: '' // Add this field
       })
     }

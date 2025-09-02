@@ -508,14 +508,33 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
     document.body.removeChild(link);
   };
 
-  // Get available months for selection
+  // Get available months for selection - FORBEDRET VERSION
   const getAvailableMonths = () => {
     const months = new Set<string>();
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    
+    // Alltid inkluder gjeldende måned først
+    months.add(currentMonth);
+    
+    // Legg til måneder fra eksisterende timeregistreringer
     timeEntries.forEach(entry => {
       months.add(entry.date.slice(0, 7));
     });
+    
     return Array.from(months).sort().reverse();
   };
+
+  // FIKSET: Oppdater selectedMonths når timeEntries er lastet
+  useEffect(() => {
+    if (!loading && timeEntries.length >= 0) { // Kjør når data er lastet (selv om tom)
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      
+      // Sett gjeldende måned som valgt hvis den ikke allerede er satt
+      if (!selectedMonths.includes(currentMonth)) {
+        setSelectedMonths([currentMonth]);
+      }
+    }
+  }, [loading, timeEntries.length, selectedMonths]); 
 
   // Calculate totals
   const filteredEntries = getFilteredEntries();
@@ -602,7 +621,7 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
                   Velg måned
                 </label>
                 <select
-                  value={selectedMonths[0]}
+                  value={selectedMonths[0] || new Date().toISOString().slice(0, 7)} // FALLBACK til gjeldende måned
                   onChange={(e) => setSelectedMonths([e.target.value])}
                   className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                 >

@@ -524,17 +524,8 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
     return Array.from(months).sort().reverse();
   };
 
-  // FIKSET: Oppdater selectedMonths når timeEntries er lastet
-  useEffect(() => {
-    if (!loading && timeEntries.length >= 0) { // Kjør når data er lastet (selv om tom)
-      const currentMonth = new Date().toISOString().slice(0, 7);
-      
-      // Sett gjeldende måned som valgt hvis den ikke allerede er satt
-      if (!selectedMonths.includes(currentMonth)) {
-        setSelectedMonths([currentMonth]);
-      }
-    }
-  }, [loading, timeEntries.length, selectedMonths]); 
+  // FJERNET: Den problematiske useEffect-blokken
+  // Gjeldende måned er allerede satt i initial state
 
   // Calculate totals
   const filteredEntries = getFilteredEntries();
@@ -550,7 +541,7 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
   const totalHours = totalConsultantHours + totalPMHours;
   const totalCost = totalConsultantCost + totalPMCost;
 
-  // Add loading state to the return
+  // Add loading state to the response
   if (loading || projectLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">

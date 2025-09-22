@@ -448,61 +448,97 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
   };
 
   // Export to Excel
-  const exportToExcel = () => {
+ const exportToExcel = () => {
     const filteredEntries = getFilteredEntries();
     const consultantStats = getConsultantStats();
     const projectManagerStats = getProjectManagerStats();
-    const categoryStats = getCategoryStats(); // NEW: Category stats for export
+    const categoryStats = getCategoryStats();
     
     let csvContent = "data:text/csv;charset=utf-8,";
     
-    // Header
-    csvContent += "Timesheet Export for " + organizationName + "\\n";
-    csvContent += "Period: " + selectedMonths.join(", ") + "\\n\\n";
+    // Header med periode info
+    csvContent += `Timesheet Export for ${organizationName}\\n`;
+    csvContent += `Period: ${selectedMonths.join(", ")}\\n`;
+    csvContent += `Export Date: ${new Date().toLocaleDateString('no-NO')}\\n\\n`;
     
-    // NEW: Category Summary
+    // 1. KATEGORIER OVERSIKT
     if (categoryStats.length > 0) {
-      csvContent += "CATEGORY SUMMARY\\n";
-      csvContent += "Category,Hours,Cost (NOK),Percentage\\n";
+      csvContent += "=== KATEGORIER OVERSIKT ===\\n";
+      csvContent += "Kategori,Timer,Kostnad (NOK)\\n";
       categoryStats.forEach(stat => {
-        csvContent += `"${stat.name}",${stat.hours},${stat.cost.toLocaleString('no-NO')},${stat.percentage.toFixed(1)}%\\n`;
-      });
-      csvContent += "\\n";
-    }
-    
-    // Consultant Summary
-    if (consultantStats.length > 0) {
-      csvContent += "CONSULTANT SUMMARY\\n";
-      csvContent += "Consultant,Hours,Cost (NOK),Percentage\\n";
-      consultantStats.forEach(stat => {
-        csvContent += `"${stat.name}",${stat.hours},${stat.cost.toLocaleString('no-NO')},${stat.percentage.toFixed(1)}%\\n`;
-      });
-      csvContent += "\\n";
-    }
-    
-    // Project Manager Summary
-    if (projectManagerStats.length > 0) {
-      csvContent += "PROJECT MANAGEMENT\\n";
-      csvContent += "Project Manager,Hours,Cost (NOK)\\n";
-      projectManagerStats.forEach(stat => {
         csvContent += `"${stat.name}",${stat.hours},${stat.cost.toLocaleString('no-NO')}\\n`;
       });
       csvContent += "\\n";
     }
     
-    // Detailed entries
-    csvContent += "DETAILED TIME ENTRIES\\n";
-    csvContent += "Date,Consultant,Hours,Category,Description,Cost (NOK)\\n"; // NEW: Added Category column
+    // 2. KONSULENTER OVERSIKT (inkluderer både konsulenter og prosjektledere)
+    csvContent += "=== KONSULENTER OVERSIKT ===\\n";
+    csvContent += "Konsulent,Timer,Kostnad (NOK),Type\\n";
+    
+    // Legg til konsulenter
+    consultantStats.forEach(stat => {
+      csvContent += `"${stat.name}",${stat.hours},${stat.cost.toLocaleString('no-NO')},Konsulent\\n`;
+    });
+    
+    // Legg til prosjektledere
+    projectManagerStats.forEach(stat => {
+      csvContent += `"${stat.name}",${stat.hours},${stat.cost.toLocaleString('no-NO')},Prosjektleder\\n`;
+    });
+    csvContent += "\\n";
+    
+    // 3. DETALJERTE TIMEREGISTRERINGER
+    csvContent += "=== TIMEREGISTRERINGER ===\\n";
+    csvContent += "Dato,Konsulent,Timer,Kategori,Kostnad (NOK),Beskrivelse\\n";
     
     filteredEntries
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(entry => {
-        csvContent += `${entry.date},"${entry.consultant}",${entry.hours},"${entry.category || 'N/A'}","${entry.description}",${entry.cost.toLocaleString('no-NO')}\\n`;      });
+        csvContent += `${entry.date},"${entry.consultant}",${entry.hours},"${entry.category || 'Ingen kategori'}",${entry.cost.toLocaleString('no-NO')},"${entry.description || '-'}"\\n`;
+      });
+    csvContent += "\\n";
     
+    // 4. SAMLET TOTAL
+    const totalConsultantHours = consultantStats.reduce((sum, stat) => sum + stat.hours, 0);
+    const totalConsultantCost = consultantStats.reduce((sum, stat) => sum + stat.cost, 0);
+    const totalPMHours = projectManagerStats.reduce((sum, stat) => sum + stat.hours, 0);
+    const totalPMCost = projectManagerStats.reduce((sum, stat) => sum + stat.cost, 0);
+    const totalHours = totalConsultantHours + totalPMHours;
+    const totalCost = totalConsultantCost + totalPMCost;
+    
+    csvContent += "=== SAMLET TOTAL ===\\n";
+    csvContent += "Type,Timer,Kostnad (NOK)\\n";
+    csvContent += `"Konsulent timer",${totalConsultantHours},${totalConsultantCost.toLocaleString('no-NO')}\\n`;
+    csvContent += `"Prosjektleder timer",${totalPMHours},${totalPMCost.toLocaleString('no-NO')}\\n`;
+    csvContent += `"TOTAL",${totalHours},${totalCost.toLocaleString('no-NO')}\\n`;
+    csvContent += "\\n";
+    
+    // Ekstra statistikk hvis relevant
+    if (monthlyBudget && viewMode === 'single') {
+      csvContent += "=== BUDSJETT ANALYSE ===\\n";
+      csvContent += "Beskrivelse,Verdi\\n";
+      csvContent += `"Månedlig budsjett",${monthlyBudget} timer\\n`;
+      csvContent += `"Brukt av budsjett",${((totalConsultantHours / monthlyBudget) * 100).toFixed(1)}%\\n`;
+      csvContent += "\\n";
+    }
+    
+    if (totalBudget) {
+      csvContent += "=== TOTAL BUDSJETT ANALYSE ===\\n";
+      csvContent += "Beskrivelse,Verdi\\n";
+      csvContent += `"Total budsjett",${totalBudget} timer\\n`;
+      csvContent += `"Brukt av total budsjett",${((totalHours / totalBudget) * 100).toFixed(1)}%\\n`;
+      csvContent += "\\n";
+    }
+    
+    // Eksporter fil
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `timesheet_${organizationName}_${selectedMonths.join('_')}.csv`);
+    
+    // Lag et bedre filnavn
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const periodStr = viewMode === 'single' ? selectedMonths[0] : `${selectedMonths.length}_months`;
+    link.setAttribute("download", `${organizationName}_timesheet_${periodStr}_${dateStr}.csv`);
+    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

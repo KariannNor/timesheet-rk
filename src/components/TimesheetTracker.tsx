@@ -4,6 +4,7 @@ import { Plus, Trash2, Download } from 'lucide-react';
 import { timeEntryService } from '../lib/supabase';
 import { projectService, type Project } from '../lib/projectService';
 import type { User } from '@supabase/supabase-js';
+import * as XLSX from 'xlsx';
 
 // Oppdater TimeEntry interface til å matche database-strukturen
 interface TimeEntry {
@@ -447,66 +448,168 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
       .sort((a, b) => b.month.localeCompare(a.month));
   };
 
-  // Export to Excel
+  // Export to Excel - EKTE EXCEL VERSJON
   const exportToExcel = () => {
     const filteredEntries = getFilteredEntries();
     const consultantStats = getConsultantStats();
     const projectManagerStats = getProjectManagerStats();
-    const categoryStats = getCategoryStats(); // NEW: Category stats for export
+    const categoryStats = getCategoryStats();
     
-    let csvContent = "data:text/csv;charset=utf-8,";
+    // Create a new workbook
+    const workbook = XLSX.utils.book_new();
     
-    // Header
-    csvContent += "Timesheet Export for " + organizationName + "\\n";
-    csvContent += "Period: " + selectedMonths.join(", ") + "\\n\\n";
-    
-    // NEW: Category Summary
+    // Calculate totals
+    const totalConsultantHours = consultantStats.reduce((sum, stat) => sum + stat.hours, 0);
+    const totalConsultantCost = consultantStats.reduce((sum, stat) => sum + stat.cost, 0);
+    const totalPMHours = projectManagerStats.reduce((sum, stat) => sum + stat.hours, 0);
+    const totalPMCost = projectManagerStats.reduce((sum, stat) => sum + stat.cost, 0);
+    const totalHours = totalConsultantHours + totalPMHours;
+    const totalCost = totalConsultantCost + totalPMCost;
+
+    // 1. SAMMENDRAG ARBEIDSARK
+    const summaryData = [
+      ['Timesheet Export', '', '', ''],
+      ['Prosjekt:', organizationName, '', ''],
+      ['Periode:', selectedMonths.join(", "), '', ''],
+      ['Eksportert:', new Date().toLocaleDateString('no-NO'), '', ''],
+      ['', '', '', ''],
+      ['SAMMENDRAG', '', '', ''],
+      ['Type', 'Timer', 'Kostnad (NOK)', 'Andel'],
+      ['Konsulent timer', totalConsultantHours, totalConsultantCost, `${totalHours > 0 ? ((totalConsultantHours / totalHours) * 100).toFixed(1) : 0}%`],
+      ['Prosjektleder timer', totalPMHours, totalPMCost, `${totalHours > 0 ? ((totalPMHours / totalHours) * 100).toFixed(1) : 0}%`],
+      ['TOTAL', totalHours, totalCost, '100%'],
+      ['', '', '', ''],
+    ];
+
+    // Legg til budsjettanalyse hvis relevant
+    if (monthlyBudget && viewMode === 'single') {
+      summaryData.push(['BUDSJETT ANALYSE', '', '', '']);
+      summaryData.push(['Månedlig budsjett', `${monthlyBudget} timer`, '', '']);
+      summaryData.push(['Brukt av budsjett', `${((totalConsultantHours / monthlyBudget) * 100).toFixed(1)}%`, '', '']);
+      summaryData.push(['', '', '', '']);
+    }
+
+    if (totalBudget) {
+      summaryData.push(['TOTAL BUDSJETT', '', '', '']);
+      summaryData.push(['Total budsjett', `${totalBudget} timer`, '', '']);
+      summaryData.push(['Brukt av total budsjett', `${((totalHours / totalBudget) * 100).toFixed(1)}%`, '', '']);
+    }
+
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Sammendrag');
+
+    // 2. KATEGORIER ARBEIDSARK - FIKSET
     if (categoryStats.length > 0) {
-      csvContent += "CATEGORY SUMMARY\\n";
-      csvContent += "Category,Hours,Cost (NOK),Percentage\\n";
-      categoryStats.forEach(stat => {
-        csvContent += `"${stat.name}",${stat.hours},${stat.cost.toLocaleString('no-NO')},${stat.percentage.toFixed(1)}%\\n`;
-      });
-      csvContent += "\\n";
+      const categoryData = [
+        ['KATEGORIER OVERSIKT', '', '', ''],
+        ['Kategori', 'Timer', 'Kostnad (NOK)', 'Andel'],
+        ...categoryStats.map(stat => [
+          stat.name,
+          stat.hours,
+          stat.cost,
+          `${stat.percentage.toFixed(1)}%`
+        ]),
+        ['', '', '', ''],
+        ['TOTAL', categoryStats.reduce((sum, stat) => sum + stat.hours, 0), categoryStats.reduce((sum, stat) => sum + stat.cost, 0), '100%']
+      ];
+
+      const categorySheet = XLSX.utils.aoa_to_sheet(categoryData);
+      XLSX.utils.book_append_sheet(workbook, categorySheet, 'Kategorier');
     }
-    
-    // Consultant Summary
-    if (consultantStats.length > 0) {
-      csvContent += "CONSULTANT SUMMARY\\n";
-      csvContent += "Consultant,Hours,Cost (NOK),Percentage\\n";
-      consultantStats.forEach(stat => {
-        csvContent += `"${stat.name}",${stat.hours},${stat.cost.toLocaleString('no-NO')},${stat.percentage.toFixed(1)}%\\n`;
-      });
-      csvContent += "\\n";
+
+    // 3. KONSULENTER ARBEIDSARK
+    const consultantData = [
+      ['KONSULENTER OVERSIKT', '', '', '', ''],
+      ['Konsulent', 'Timer', 'Kostnad (NOK)', 'Andel', 'Type'],
+      ...consultantStats.map(stat => [
+        stat.name,
+        stat.hours,
+        stat.cost,
+        `${stat.percentage.toFixed(1)}%`,
+        'Konsulent'
+      ]),
+      ...projectManagerStats.map(stat => [
+        stat.name,
+        stat.hours,
+        stat.cost,
+        `${totalHours > 0 ? ((stat.hours / totalHours) * 100).toFixed(1) : 0}%`,
+        'Prosjektleder'
+      ]),
+      ['', '', '', '', ''],
+      ['TOTAL', totalHours, totalCost, '100%', '']
+    ];
+
+    const consultantSheet = XLSX.utils.aoa_to_sheet(consultantData);
+    XLSX.utils.book_append_sheet(workbook, consultantSheet, 'Konsulenter');
+
+    // 4. TIMEREGISTRERINGER ARBEIDSARK
+    const timeEntriesData = [
+      ['DETALJERTE TIMEREGISTRERINGER', '', '', '', '', ''],
+      ['Dato', 'Konsulent', 'Timer', 'Kategori', 'Kostnad (NOK)', 'Beskrivelse'],
+      ...filteredEntries
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(entry => [
+          entry.date,
+          entry.consultant,
+          entry.hours,
+          entry.category || 'Ingen kategori',
+          entry.cost,
+          entry.description || '-'
+        ])
+    ];
+
+    const timeEntriesSheet = XLSX.utils.aoa_to_sheet(timeEntriesData);
+    XLSX.utils.book_append_sheet(workbook, timeEntriesSheet, 'Timeregistreringer');
+
+    // 5. MÅNEDLIG OVERSIKT (hvis flere måneder)
+    if (viewMode === 'multiple') {
+      const monthlyHistory = getMonthlyHistory();
+      const monthlyData = [
+        ['MÅNEDLIG OVERSIKT', '', '', ''],
+        ['Måned', 'Timer', 'Kostnad (NOK)', 'Registreringer'],
+        ...monthlyHistory.map(item => [
+          new Date(item.month + '-01').toLocaleDateString('no-NO', { 
+            year: 'numeric', 
+            month: 'long' 
+          }),
+          item.hours,
+          item.cost,
+          item.entries
+        ])
+      ];
+
+      const monthlySheet = XLSX.utils.aoa_to_sheet(monthlyData);
+      XLSX.utils.book_append_sheet(workbook, monthlySheet, 'Månedlig oversikt');
     }
-    
-    // Project Manager Summary
-    if (projectManagerStats.length > 0) {
-      csvContent += "PROJECT MANAGEMENT\\n";
-      csvContent += "Project Manager,Hours,Cost (NOK)\\n";
-      projectManagerStats.forEach(stat => {
-        csvContent += `"${stat.name}",${stat.hours},${stat.cost.toLocaleString('no-NO')}\\n`;
-      });
-      csvContent += "\\n";
+
+    // Formatering - set column widths
+    const setColumnWidths = (sheet: XLSX.WorkSheet, widths: number[]) => {
+      const cols = widths.map(width => ({ width }));
+      sheet['!cols'] = cols;
+    };
+
+    // Apply formatting to sheets
+    setColumnWidths(summarySheet, [20, 15, 15, 10]);
+    if (categoryStats.length > 0) {
+      // categorySheet er nå tilgjengelig siden vi er inne i samme if-blokk
+      const categorySheet = workbook.Sheets['Kategorier'];
+      if (categorySheet) {
+        setColumnWidths(categorySheet, [25, 10, 15, 10]);
+      }
     }
-    
-    // Detailed entries
-    csvContent += "DETAILED TIME ENTRIES\\n";
-    csvContent += "Date,Consultant,Hours,Category,Description,Cost (NOK)\\n"; // NEW: Added Category column
-    
-    filteredEntries
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .forEach(entry => {
-        csvContent += `${entry.date},"${entry.consultant}",${entry.hours},"${entry.category || 'N/A'}","${entry.description}",${entry.cost.toLocaleString('no-NO')}\\n`;      });
-    
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `timesheet_${organizationName}_${selectedMonths.join('_')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    setColumnWidths(consultantSheet, [25, 10, 15, 10, 15]);
+    setColumnWidths(timeEntriesSheet, [12, 20, 8, 20, 15, 40]);
+
+    // Generate filename
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const periodStr = viewMode === 'single' ? selectedMonths[0] : `${selectedMonths.length}_months`;
+    const filename = `${organizationName.replace(/[^a-zA-Z0-9]/g, '_')}_timesheet_${periodStr}_${dateStr}.xlsx`;
+
+    // Write and download the Excel file
+    XLSX.writeFile(workbook, filename);
   };
+
+// ... rest of the component remains the same ...
 
   // Get available months for selection - FORBEDRET VERSION
   const getAvailableMonths = () => {

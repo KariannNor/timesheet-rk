@@ -1,6 +1,6 @@
-# Timesheet Tracker - Røde Kors Forvaltningsavtale
+# Timesheet Tracker
 
-A React TypeScript application for tracking consultant hours and costs for the Røde Kors management agreement with Point Taken.
+A React TypeScript application for tracking consultant hours and costs for prosjects.
 
 ## Features
 

@@ -5,8 +5,11 @@ export interface Project {
   monthlyBudgetHours: number | null;
   hourlyRate: number;
   consultants: string[];
+  consultantRates?: Record<string, number>;
+  consultantPercentages?: Record<string, number>; // NEW
+  categories?: string[]; // NEW
   projectManagerRate: number;
-  projectManagerName: string; // Add this field
+  projectManagerName: string;
   createdAt: string;
   updatedAt: string;
   accessEmail?: string;
@@ -14,11 +17,15 @@ export interface Project {
 
 export interface CreateProjectData {
   name: string;
-  budgetHours: number | null;
-  monthlyBudgetHours: number | null;
+  budgetHours?: number | null;
+  monthlyBudgetHours?: number | null;
   hourlyRate: number;
   consultants: string[];
+  consultantRates?: Record<string, number>;
+  consultantPercentages?: Record<string, number>; // NEW
+  categories?: string[]; // NEW
   projectManagerRate: number;
-  projectManagerName: string; // Add this field
+  projectManagerName: string;
   accessEmail?: string;
 }
+// ...existing code...

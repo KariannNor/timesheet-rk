@@ -67,6 +67,7 @@ interface OrganizationConfig {
   totalBudget: number | null;
   organizationName: string;
   categories: string[]; // NEW: Available categories for time tracking
+  consultantPercentages?: Record<string, number>; // NEW: prosent per konsulent (0-100)
 }
 
 // Erstatt getConsultantsAndPricesForOrganization funksjonen
@@ -80,13 +81,19 @@ const getConsultantsAndPricesForOrganization = (organizationId: string): Organiz
           'Mathias': 1550,
           'Madelein': 1550
         },
+        consultantPercentages: {
+          'Thomas': 100,
+          'Njål': 100,
+          'Mathias': 100,
+          'Madelein': 100
+        },
         projectManager: {
           'Kariann (Prosjektleder)': 1550
         },
         monthlyBudget: null,
         totalBudget: 630,
         organizationName: 'Infunnel/Holmen',
-        categories: ['Utvikling', 'Design', 'Møter'] // DEFAULT: Legacy categories
+        categories: ['Utvikling', 'Design', 'Møter']
       }
     
     case 'advokatforeningen':
@@ -119,6 +126,17 @@ const getConsultantsAndPricesForOrganization = (organizationId: string): Organiz
             'Philip': 1550,
             'Nick': 1550,
             'MVP/Rådgiver': 1550
+        },
+        consultantPercentages: {
+          'Njål': 100,
+          'Mathias': 100,
+          'Per': 100,
+          'Pepe': 100,
+          'Ulrikke': 100,
+          'Andri': 100,
+          'Philip': 100,
+          'Nick': 100,
+          'MVP/Rådgiver': 100
         },
         projectManager: {
           'Kariann (Prosjektleder)': 1550
@@ -181,24 +199,37 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
             if (project && project.consultants && project.consultants.length > 0) {
               console.log('Loading consultants for project:', project.name, project.consultants);
               
-              // Use individual consultant rates or fall back to standard rate
+              // Build consultant rates (ensure numeric fallback)
               const projectConsultants: Record<string, number> = {};
               project.consultants.forEach((consultant: string) => {
-                // Use individual rate if available, otherwise use standard hourly rate
-                projectConsultants[consultant] = project.consultantRates?.[consultant] || project.hourlyRate;
+                projectConsultants[consultant] = project.consultantRates?.[consultant] ?? project.hourlyRate ?? 0;
               });
 
-              // Override organization config with project data
-              setOrgConfig({
+              // Build consultant percentages: prefer project values, fallback to 100 (ensure number)
+              const projectPercentages: Record<string, number> = {};
+              project.consultants.forEach((consultant: string) => {
+                const p = project.consultantPercentages?.[consultant];
+                projectPercentages[consultant] = typeof p === 'number' ? p : 100;
+              });
+
+              // Ensure project manager rate is a number (fallback 0)
+              const pmName = project.projectManagerName ?? 'Prosjektleder';
+              const pmRate = project.projectManagerRate ?? 0;
+
+              // Override organization config with project data (types safe)
+              setOrgConfig(prev => ({
+                ...prev,
                 consultants: projectConsultants,
                 projectManager: {
-                  [project.projectManagerName || 'Prosjektleder']: project.projectManagerRate
+                  [pmName]: pmRate
                 },
-                monthlyBudget: project.monthlyBudgetHours,
-                totalBudget: project.budgetHours,
-                organizationName: project.name,
-                categories: project.categories || [] // NEW: Load categories from project
-              });
+                monthlyBudget: project.monthlyBudgetHours ?? null,
+                totalBudget: project.budgetHours ?? null,
+                // bruk forrige state som fallback for organizationName / categories
+                organizationName: project.name ?? prev.organizationName,
+                categories: project.categories ?? prev.categories,
+                consultantPercentages: projectPercentages
+              }));
             }
           } catch (projectError) {
             console.error('Error loading project from database:', projectError);
@@ -609,7 +640,26 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
     XLSX.writeFile(workbook, filename);
   };
 
-// ... rest of the component remains the same ...
+  const HOURS_PER_WORKDAY = 7.5 // juster om nødvendig
+
+  const getWorkingDaysInMonth = (month: string) => {
+    const [year, mon] = month.split('-').map(Number)
+    const d = new Date(year, mon - 1, 1)
+    let count = 0
+    while (d.getMonth() === mon - 1) {
+      const day = d.getDay() // 0=Søn,1=Man,...,6=Lør
+      if (day >= 1 && day <= 5) count++
+      d.setDate(d.getDate() + 1)
+    }
+    return count
+  }
+
+  const getCapacityHoursForConsultant = (consultant: string) => {
+    const months = viewMode === 'single' ? selectedMonths : selectedMonths
+    const totalWorkDays = months.reduce((sum, m) => sum + getWorkingDaysInMonth(m), 0)
+    const percent = orgConfig.consultantPercentages?.[consultant] ?? 100
+    return (percent / 100) * totalWorkDays * HOURS_PER_WORKDAY
+  }
 
   // Get available months for selection - FORBEDRET VERSION
   const getAvailableMonths = () => {
@@ -946,15 +996,28 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
                         {stat.cost.toLocaleString('no-NO')} kr
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="flex items-center">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 mr-2">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full" 
-                              style={{ width: `${stat.percentage}%` }}
-                            ></div>
-                          </div>
-                          <span>{stat.percentage.toFixed(1)}%</span>
-                        </div>
+                        {(() => {
+                          const capacity = getCapacityHoursForConsultant(stat.name)
+                          const used = stat.hours
+                          const fill = capacity > 0 ? Math.min(100, (used / capacity) * 100) : 0
+                          return (
+                            <div className="flex items-center space-x-3">
+                              <div className="flex-1">
+                                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                  <div
+                                    className={`h-3 rounded-full ${fill >= 100 ? 'bg-red-500' : 'bg-green-500'}`}
+                                    style={{ width: `${fill}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-700 whitespace-nowrap">
+                                {capacity > 0
+                                  ? `${used.toFixed(1)}h / ${capacity.toFixed(1)}h (${fill.toFixed(1)}%)`
+                                  : 'Ingen kapasitet'}
+                              </div>
+                            </div>
+                          )
+                        })()}
                       </td>
                     </tr>
                   ))}

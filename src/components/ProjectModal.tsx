@@ -28,6 +28,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     hourlyRate: 1550,
     consultants: [],
     consultantRates: {},
+    consultantPercentages: {}, // NEW: prosent per konsulent
     categories: [], // NEW: Categories for time tracking
     projectManagerRate: 1550,
     projectManagerName: '',
@@ -42,17 +43,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   useEffect(() => {
     if (project) {
       setFormData({
-        name: project.name,
-        budgetHours: project.budgetHours,
-        monthlyBudgetHours: project.monthlyBudgetHours,
-        hourlyRate: project.hourlyRate,
-        consultants: project.consultants || [],
-        consultantRates: project.consultantRates || {},
-        categories: project.categories || [], // NEW: Load categories
-        projectManagerRate: project.projectManagerRate,
-        projectManagerName: project.projectManagerName || '',
-        category: project.category || 'Prosjekt',
-        accessEmail: project.accessEmail || ''
+        name: project.name ?? '',
+        budgetHours: project.budgetHours ?? null,
+        monthlyBudgetHours: project.monthlyBudgetHours ?? null,
+        hourlyRate: project.hourlyRate ?? 1550,
+        consultants: project.consultants ?? [],
+        consultantRates: project.consultantRates ?? {},
+        consultantPercentages: project.consultantPercentages ?? {}, // NEW: Load percentages
+        categories: project.categories ?? [], // NEW: Load categories
+        projectManagerRate: project.projectManagerRate ?? 1550,
+        projectManagerName: project.projectManagerName ?? '',
+        category: project.category ?? 'Prosjekt',
+        accessEmail: project.accessEmail ?? ''
       });
       
       if (project.monthlyBudgetHours) {
@@ -70,6 +72,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
         hourlyRate: 1550,
         consultants: [],
         consultantRates: {},
+        consultantPercentages: {}, // NEW
         categories: [], // NEW: Reset categories
         projectManagerRate: 1550,
         projectManagerName: '',
@@ -85,10 +88,11 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const submitData = {
+    const submitData: CreateProjectData = {
       ...formData,
       budgetHours: budgetType === 'total' ? formData.budgetHours : null,
-      monthlyBudgetHours: budgetType === 'monthly' ? formData.monthlyBudgetHours : null
+      monthlyBudgetHours: budgetType === 'monthly' ? formData.monthlyBudgetHours : null,
+      consultantPercentages: formData.consultantPercentages // ensure included
     };
 
     if (project && onUpdate) {
@@ -111,14 +115,19 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   };
 
   const addConsultant = () => {
-    if (newConsultantName.trim() && !formData.consultants.includes(newConsultantName.trim())) {
-      const newConsultant = newConsultantName.trim();
+    const name = newConsultantName.trim();
+    const currentConsultants = formData.consultants ?? [];
+    if (name && !currentConsultants.includes(name)) {
       setFormData(prev => ({
         ...prev,
-        consultants: [...prev.consultants, newConsultant],
+        consultants: [...(prev.consultants ?? []), name],
         consultantRates: {
-          ...prev.consultantRates,
-          [newConsultant]: prev.hourlyRate
+          ...(prev.consultantRates ?? {}),
+          [name]: prev.hourlyRate ?? 0
+        },
+        consultantPercentages: {
+          ...(prev.consultantPercentages ?? {}),
+          [name]: 100 // default 100%
         }
       }));
       setNewConsultantName('');
@@ -127,13 +136,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 
   const removeConsultant = (consultantToRemove: string) => {
     setFormData(prev => {
-      const newConsultantRates = { ...prev.consultantRates };
+      const consultants = prev.consultants ?? [];
+      const newConsultantRates = { ...(prev.consultantRates ?? {}) };
       delete newConsultantRates[consultantToRemove];
+
+      const newConsultantPercentages = { ...(prev.consultantPercentages ?? {}) };
+      delete newConsultantPercentages[consultantToRemove];
       
       return {
         ...prev,
-        consultants: prev.consultants.filter(c => c !== consultantToRemove),
-        consultantRates: newConsultantRates
+        consultants: consultants.filter(c => c !== consultantToRemove),
+        consultantRates: newConsultantRates,
+        consultantPercentages: newConsultantPercentages
       };
     });
   };
@@ -142,19 +156,30 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
     setFormData(prev => ({
       ...prev,
       consultantRates: {
-        ...prev.consultantRates,
-        [consultant]: rate
+        ...(prev.consultantRates ?? {}),
+        [consultant]: Number.isNaN(rate) ? 0 : rate
       }
     }));
   };
 
-  // NEW: Category management functions
+  const updateConsultantPercentage = (consultant: string, percent: number) => {
+    const normalized = Number.isNaN(percent) ? 0 : Math.max(0, Math.min(100, Math.round(percent)));
+    setFormData(prev => ({
+      ...prev,
+      consultantPercentages: {
+        ...(prev.consultantPercentages ?? {}),
+        [consultant]: normalized
+      }
+    }));
+  };
+
   const addCategory = () => {
-    if (newCategoryName.trim() && !formData.categories.includes(newCategoryName.trim())) {
-      const newCategory = newCategoryName.trim();
+    const name = newCategoryName.trim();
+    const current = formData.categories ?? [];
+    if (name && !current.includes(name)) {
       setFormData(prev => ({
         ...prev,
-        categories: [...prev.categories, newCategory]
+        categories: [...(prev.categories ?? []), name]
       }));
       setNewCategoryName('');
     }
@@ -163,7 +188,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   const removeCategory = (categoryToRemove: string) => {
     setFormData(prev => ({
       ...prev,
-      categories: prev.categories.filter(c => c !== categoryToRemove)
+      categories: (prev.categories ?? []).filter(c => c !== categoryToRemove)
     }));
   };
 
@@ -236,7 +261,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               </label>
               <input
                 type="email"
-                value={formData.accessEmail}
+                value={formData.accessEmail ?? ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, accessEmail: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                 placeholder="f.eks. kunde@eksempel.no"
@@ -406,7 +431,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                 <button
                   type="button"
                   onClick={addConsultant}
-                  disabled={!newConsultantName.trim() || formData.consultants.includes(newConsultantName.trim())}
+                  disabled={!newConsultantName.trim() || (formData.consultants ?? []).includes(newConsultantName.trim())}
                   className="px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   <Plus size={16} />
@@ -414,24 +439,38 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               </div>
               
               {/* NEW: List of added consultants with individual rates */}
-              {formData.consultants.length > 0 && (
+              {(formData.consultants ?? []).length > 0 && (
                 <div className="border border-gray-200 rounded-md p-4 space-y-3 max-h-64 overflow-y-auto">
-                  {formData.consultants.map((consultant, index) => (
+                  {(formData.consultants ?? []).map((consultant, index) => (
                     <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-3 rounded">
                       <div className="flex-1">
                         <span className="text-sm font-medium text-gray-900">{consultant}</span>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-1">
                           <input
                             type="number"
-                            value={formData.consultantRates?.[consultant] || formData.hourlyRate}
+                            value={formData.consultantRates?.[consultant] ?? formData.hourlyRate}
                             onChange={(e) => updateConsultantRate(consultant, parseInt(e.target.value) || 0)}
                             className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                             min="1"
                           />
                           <span className="text-xs text-gray-500">kr/t</span>
                         </div>
+
+                        {/* NEW: percentage input */}
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="number"
+                            value={formData.consultantPercentages?.[consultant] ?? 100}
+                            onChange={(e) => updateConsultantPercentage(consultant, Number(e.target.value))}
+                            className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                            min="0"
+                            max="100"
+                          />
+                          <span className="text-xs text-gray-500">%</span>
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => removeConsultant(consultant)}
@@ -444,11 +483,11 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   ))}
                 </div>
               )}
-              
+
               <p className="text-sm text-gray-500 mt-2">
-                {formData.consultants.length === 0 
+                {(formData.consultants ?? []).length === 0 
                   ? 'Ingen konsulenter lagt til ennå' 
-                  : `${formData.consultants.length} konsulent${formData.consultants.length !== 1 ? 'er' : ''} lagt til`
+                  : `${(formData.consultants ?? []).length} konsulent${(formData.consultants ?? []).length !== 1 ? 'er' : ''} lagt til`
                 }
               </p>
             </div>
@@ -471,16 +510,16 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                 <button
                   type="button"
                   onClick={addCategory}
-                  disabled={!newCategoryName.trim() || formData.categories.includes(newCategoryName.trim())}
+                  disabled={!newCategoryName.trim() || (formData.categories ?? []).includes(newCategoryName.trim())}
                   className="px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   <Plus size={16} />
                 </button>
               </div>
               
-              {formData.categories.length > 0 && (
+              {(formData.categories ?? []).length > 0 && (
                 <div className="border border-gray-200 rounded-md p-4 space-y-2 max-h-48 overflow-y-auto">
-                  {formData.categories.map((category, index) => (
+                  {(formData.categories ?? []).map((category, index) => (
                     <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
                       <span className="text-sm text-gray-900">{category}</span>
                       <button
@@ -496,9 +535,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               )}
               
               <p className="text-sm text-gray-500 mt-2">
-                {formData.categories.length === 0 
+                {(formData.categories ?? []).length === 0 
                   ? 'Ingen kategorier lagt til ennå. Kategorier brukes for å organisere timer etter oppgavetype.' 
-                  : `${formData.categories.length} kategori${formData.categories.length !== 1 ? 'er' : ''} lagt til`
+                  : `${(formData.categories ?? []).length} kategori${(formData.categories ?? []).length !== 1 ? 'er' : ''} lagt til`
                 }
               </p>
             </div>
@@ -528,7 +567,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isLoading || !formData.name || formData.consultants.length === 0 || !formData.projectManagerName}
+                disabled={isLoading || !formData.name || (formData.consultants ?? []).length === 0 || !formData.projectManagerName}
                 className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 {isLoading ? (

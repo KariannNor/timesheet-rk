@@ -908,6 +908,60 @@ const TimesheetTracker = ({ user, isReadOnly, organizationId }: TimesheetTracker
           </div>
         )}
 
+        {/* Totalt antall timer ført denne måneden (kun konsulent-timer) - fremhevet */}
+        <div className="bg-[#eff6ff] text-black rounded-xl shadow-sm p-6 mb-8">
+          <h2 className="text-lg font-semibold mb-3 text-black">Totalt antall timer ført denne måneden</h2>
+          {(() => {
+            const CAP = 600;
+            const GREEN_LIMIT = 380;
+            const ORANGE_LIMIT = 420;
+            const logged = Math.round(totalConsultantHours * 10) / 10; // kun konsulent-timer
+            const pct = Math.min(100, (logged / CAP) * 100);
+            const barColor =
+              logged <= GREEN_LIMIT ? 'bg-green-500' :
+              logged <= ORANGE_LIMIT ? 'bg-orange-500' :
+              'bg-red-500';
+
+            return (
+              <div>
+                <div className="w-full bg-[#cfcfcf] rounded-full h-5 overflow-hidden mb-3">
+                  <div
+                    className={`${barColor} h-5 rounded-full transition-all duration-300`}
+                    style={{ width: `${pct}%` }}
+                    aria-valuemin={0}
+                    aria-valuemax={CAP}
+                    aria-valuenow={logged}
+                    role="progressbar"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-sm" style={{ color: '#000' }}>
+                  <div className="flex items-baseline space-x-3">
+                    <span className="text-2xl font-bold">{logged}h</span>
+                    <span className="text-xs">av {CAP}h</span>
+                  </div>
+                  <div className="text-sm font-medium">{pct.toFixed(1)}%</div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs mt-3" style={{ color: '#111' }}>
+                  <div className="flex items-center space-x-2">
+                    <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" />
+                    <span>Grønn: ≤ {GREEN_LIMIT}h</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="w-3 h-3 rounded-sm bg-orange-500 inline-block" />
+                    <span>Oransje: {GREEN_LIMIT + 1}–{ORANGE_LIMIT}h</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />
+                    <span>Rød: {ORANGE_LIMIT + 1}–{CAP}h</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
         {/* NEW: Category Statistics */}
         {categoryStats.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
